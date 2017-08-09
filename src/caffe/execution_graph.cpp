@@ -73,17 +73,16 @@ void ExecutionGraphLayer::printExecutionGraphLayer() {
   << endl;
 }
 
-void ExecutionGraph::addEdge(int src, int dst, float weight) {
-  graph_[src].push_back(make_pair(dst,weight));
+void ExecutionGraph::addEdge(list<pair<int, float> >* graph, int src, int dst, float weight) {
+  graph[src].push_back(make_pair(dst,weight));
 }
 
 void ExecutionGraph::createTimeExecutionGraph() {
-	num_vertices_ = (4 * graph_layers_.size()) + 2;
-  graph_ = new list<pair<int, float> >[num_vertices_];   // +2 for input,output
+  time_graph_ = new list<pair<int, float> >[(4 * graph_layers_.size()) + 2];   // +2 for input,output
   float network_speed = 1.0;
 
   // edge from input
-  addEdge(0, 1, 0.0);
+  addEdge(time_graph_, 0, 1, 0.0);
 
   for (int i = 0; i < graph_layers_.size(); i++) {
     int idx = (4 * i) + 1;
@@ -94,28 +93,27 @@ void ExecutionGraph::createTimeExecutionGraph() {
     float exec_time_s = graph_layers_[i]->exec_time_s;
 
     // set edges inside a layer
-    addEdge(idx, idx + 1, (static_cast<float>(model_size) + input_feature_size)/network_speed);
-    addEdge(idx + 1, idx + 2, exec_time_s);
-    addEdge(idx + 2, idx + 3, output_feature_size/network_speed);
-    addEdge(idx, idx + 3, exec_time_c);
+    addEdge(time_graph_, idx, idx + 1, (static_cast<float>(model_size) + input_feature_size)/network_speed);
+    addEdge(time_graph_, idx + 1, idx + 2, exec_time_s);
+    addEdge(time_graph_, idx + 2, idx + 3, output_feature_size/network_speed);
+    addEdge(time_graph_, idx, idx + 3, exec_time_c);
 
     // set edges in-between layers
     // client route
-    addEdge(idx + 3, idx + 4, 0.0);
+    addEdge(time_graph_, idx + 3, idx + 4, 0.0);
 
     // server route
     if (idx > 2)
-      addEdge(idx - 2, idx + 1, static_cast<float>(model_size)/network_speed);
+      addEdge(time_graph_, idx - 2, idx + 1, static_cast<float>(model_size)/network_speed);
   }
 }
 
 void ExecutionGraph::createEnergyExecutionGraph() {
-	num_vertices_ = (3 * graph_layers_.size()) + 2;
-  graph_ = new list<pair<int, float> >[num_vertices_];   // +2 for input,output
+  energy_graph_ = new list<pair<int, float> >[(3 * graph_layers_.size()) + 2];   // +2 for input,output
   float network_speed = 1.0;
 
   // edge from input
-  addEdge(0, 1, 0.0);
+  addEdge(energy_graph_, 0, 1, 0.0);
 
   for (int i = 0; i < graph_layers_.size(); i++) {
     int idx = (3 * i) + 1;
@@ -125,24 +123,58 @@ void ExecutionGraph::createEnergyExecutionGraph() {
     float exec_time_c = graph_layers_[i]->exec_time_c;
 
     // set edges inside a layer
-    addEdge(idx, idx + 1, transfer_watt * ((static_cast<float>(model_size) + input_feature_size)/network_speed));
-    addEdge(idx + 1, idx + 2, transfer_watt * (output_feature_size/network_speed));
-    addEdge(idx, idx + 2, compute_watt * exec_time_c);
+    addEdge(energy_graph_, idx, idx + 1, transfer_watt * ((static_cast<float>(model_size) + input_feature_size)/network_speed));
+    addEdge(energy_graph_, idx + 1, idx + 2, transfer_watt * (output_feature_size/network_speed));
+    addEdge(energy_graph_, idx, idx + 2, compute_watt * exec_time_c);
 
     // set edges in-between layers
     // client route
-    addEdge(idx + 2, idx + 3, 0.0);
+    addEdge(energy_graph_, idx + 2, idx + 3, 0.0);
 
     // server route
     if (idx > 2)
-      addEdge(idx - 2, idx + 1, transfer_watt * (static_cast<float>(model_size)/network_speed));
+      addEdge(energy_graph_, idx - 2, idx + 1, transfer_watt * (static_cast<float>(model_size)/network_speed));
   }
+}
+
+void ExecutionGraph::getBestPathForTime(list<pair<int, int> >* result) {
+  shortestPath(TIME, result);
+}
+
+void ExecutionGraph::getBestPathForEnergy(list<pair<int, int> >* result) {
+  shortestPath(ENERGY, result);
 }
 
 typedef pair<float, int> fiPair;
 
-void ExecutionGraph::shortestPath(int src) {
-	int V = num_vertices_;
+static bool isServerNode(ExecutionGraph::OptTarget opt_target, int id) {
+  if (opt_target == ExecutionGraph::TIME) {
+    int offset = (id - 1) % 4;
+    return (offset == 1) || (offset == 2);
+  }
+  else if (opt_target == ExecutionGraph::ENERGY) {
+    int offset = (id - 1) % 3;
+    return (offset == 1);
+  }
+  // unreachable
+  CHECK(false);
+  return false;
+}
+
+void ExecutionGraph::shortestPath(OptTarget opt_target, list<pair<int, int> >* result) {
+
+  list<pair<int, float> >* graph = NULL;
+  int V = 0;
+  if (opt_target == TIME) {
+    graph = time_graph_;
+    V = (4 * graph_layers_.size()) + 2;
+  }
+  else if (opt_target == ENERGY) {
+    graph = energy_graph_;
+    V = (3 * graph_layers_.size()) + 2;
+  }
+
+  int src = 0;
 
 	// Save the previous node of each node to restore the shortest path
 	vector<int> path(V, -1);
@@ -170,7 +202,7 @@ void ExecutionGraph::shortestPath(int src) {
 
 		// 'i' is used to get all adjacent vertices of a vertex
 		list< pair<int, float> >::iterator i;
-		for (i = graph_[u].begin(); i != graph_[u].end(); ++i) {
+		for (i = graph[u].begin(); i != graph[u].end(); ++i) {
 			// Get vertex label and weight of current adjacent of u
 			int v = (*i).first;
 			int weight = (*i).second;
@@ -186,13 +218,23 @@ void ExecutionGraph::shortestPath(int src) {
 	}
 
 	// Print shortest distances stored in dist[]
-	cout << "Vertex   Distance from Source" << endl;
-	for (int i = 0; i < V; ++i)
-			cout << i << "\t\t" << dist[i] << endl;
+//	cout << "Vertex   Distance from Source" << endl;
+//	for (int i = 0; i < V; ++i)
+//			cout << i << "\t\t" << dist[i] << endl;
 
 	cout << "Shortest path from src to dst" << endl;
 	int node = V-1;
+  int resume_point = 0;
 	while (node != src) {
+
+    if (!isServerNode(opt_target, node) && isServerNode(opt_target, path[node])) {
+      resume_point = node;
+    }
+    else if (isServerNode(opt_target, node) && !isServerNode(opt_target, path[node])) {
+      result->push_front(make_pair(path[node], resume_point));
+      resume_point = 0;
+    }
+
 		cout << node << " ";
 		node = path[node];
 	}

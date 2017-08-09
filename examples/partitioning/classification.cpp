@@ -87,7 +87,22 @@ Classifier::Classifier(const string& model_file,
   graph_.reset(new ExecutionGraph(net_.get()));
   graph_->printLayers();
   graph_->createTimeExecutionGraph();
-  graph_->shortestPath(0);
+  graph_->createEnergyExecutionGraph();
+
+  /* Get partitioning points of best path */
+  list<pair<int, int> > server_part_time;
+  list<pair<int, int> > server_part_energy;
+  graph_->getBestPathForTime(&server_part_time);
+  graph_->getBestPathForEnergy(&server_part_energy);
+  list< pair<int, int> >::iterator i;
+  cout << "Partitioning points for time optimization (offloading point, resume point)" << endl;
+  for (i = server_part_time.begin(); i != server_part_time.end(); ++i) {
+    cout << "(" << (*i).first << ", " << (*i).second << ")" << endl;
+  }
+  cout << "Partitioning points for energy optimization (offloading point, resume point)" << endl;
+  for (i = server_part_energy.begin(); i != server_part_energy.end(); ++i) {
+    cout << "(" << (*i).first << ", " << (*i).second << ")" << endl;
+  }
 }
 
 static bool PairCompare(const std::pair<float, int>& lhs,

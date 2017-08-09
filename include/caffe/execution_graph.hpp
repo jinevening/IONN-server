@@ -62,14 +62,33 @@ class ExecutionGraphLayer {
  */
 class ExecutionGraph {
  public:
-  explicit ExecutionGraph(Net<float>* net) {
-    net_ = net;
+  enum OptTarget {
+    TIME = 0,
+    ENERGY = 1
+  };
+
+  explicit ExecutionGraph(Net<float>* net)
+    : transfer_watt(1.0),
+      compute_watt(1.0),
+      time_graph_(NULL),
+      energy_graph_(NULL),
+      net_(net) {
+//    net_ = net;
+    // create simplified NN layers for execution graph
+    // from real caffe NN layers
     setUpExecutionGraphLayers();
   }
+
   virtual ~ExecutionGraph() {}
 
+  // print simplified layers
   void printLayers();
-  void shortestPath(int src);
+
+  // print best path for time/energy
+  void getBestPathForTime(list<pair<int, int> >* result);
+  void getBestPathForEnergy(list<pair<int, int> >* result);
+
+  // create NN execution graph for time/energy optimization
   void createTimeExecutionGraph();
   void createEnergyExecutionGraph();
 
@@ -80,30 +99,15 @@ class ExecutionGraph {
  private:
   void setUpExecutionGraphLayers();
 
-  void addEdge(int src, int dst, float weight);
+  void addEdge(list<pair<int, float> > * graph, int src, int dst, float weight);
+  void shortestPath(OptTarget opt_target, list<pair<int, int> >* result);
   
   // adjacency list graph implementation
-  list<pair<int, float> > * graph_;
-  int num_vertices_;
-  vector<ExecutionGraphLayer*> graph_layers_;
+  list<pair<int, float> > * time_graph_;
+  list<pair<int, float> > * energy_graph_;
   Net<float>* net_;
+  vector<ExecutionGraphLayer*> graph_layers_;
   map<string, int> layer_names_index_;
-
-};
-
-class TimeExecutionGraph : public ExecutionGraph {
- public:
-  explicit TimeExecutionGraph(Net<float>* net)
-    : ExecutionGraph(net) {}
-  ~TimeExecutionGraph() {}
-};
-
-class EnergyExecutionGraph : public ExecutionGraph {
- public:
-  explicit EnergyExecutionGraph(Net<float>* net)
-    : ExecutionGraph(net) {}
-  ~EnergyExecutionGraph() {}
-
 };
 
 }  // namespace caffe
