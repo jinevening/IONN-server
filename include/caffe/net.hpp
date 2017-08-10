@@ -227,6 +227,10 @@ class Net {
   static bool StateMeetsRule(const NetState& state, const NetStateRule& rule,
       const string& layer_name);
 
+  // Prediction Model
+  inline void server_predict();
+  inline void client_predict();
+
   // Invoked at specific points during an iteration
   class Callback {
    protected:

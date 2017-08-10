@@ -252,6 +252,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   }
   ShareWeights();
   debug_info_ = param.debug_info();
+  server_predict();
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
 }
 
@@ -349,6 +350,68 @@ bool Net<Dtype>::StateMeetsRule(const NetState& state,
     }
   }
   return true;
+}
+
+// Prediction Model
+template <typename Dtype>
+void Net<Dtype>::server_predict(){
+	for(int i=0; i<layers_.size(); i++){
+  		const LayerParameter& layer_param = layers_[i]->layer_param();
+		if(layer_param.name().find("split") != string::npos)continue;
+		float execution_time = 1.0;
+		//LOG(INFO) << i << " " << layer_param.name() << " : " << top_vecs[i][0]->shape_string();
+		string TypeName = layer_param.type();
+		int InputSize = 1;
+		for(int j=1; bottom_vecs_[i].size() && j<bottom_vecs_[i][0]->shape().size(); j++)InputSize *= bottom_vecs_[i][0]->shape(j);
+		if(TypeName == "Convolution"){
+			int Pad = 0, Stride = 1;
+			const ConvolutionParameter& conv_param = layer_param.convolution_param();
+			if(conv_param.pad_size() > 0)Pad = conv_param.pad(0);
+			if(conv_param.stride_size() > 0)Stride = conv_param.stride(0);
+			InputSize = ((bottom_vecs_[i][0]->shape(2) + 2 * Pad - conv_param.kernel_size(0)) / Stride) + 1;
+			execution_time = (1.1261e-6) * (InputSize * InputSize * conv_param.num_output()
+					* bottom_vecs_[i][0]->shape(1) * conv_param.kernel_size(0)
+					* conv_param.kernel_size(0)) - 0.0919272073;
+		}
+		else if(TypeName == "ReLU"){
+			execution_time = (8.7878e-6) * (InputSize) + 0.0040442887;
+		}
+		else if(TypeName == "Pooling"){
+			int Pad = 0, Stride = 1;
+			const PoolingParameter& pool_param = layer_param.pooling_param();
+			if(pool_param.has_pad())Pad = pool_param.pad();
+			if(pool_param.has_stride())Stride = pool_param.stride();
+			InputSize = ((bottom_vecs_[i][0]->shape(2) + 2 * Pad - pool_param.kernel_size()) / Stride) + 1;
+			if(pool_param.PoolMethod_Name(pool_param.pool()) == "MAX"){
+				execution_time = (3.05740e-5) * (InputSize * InputSize * bottom_vecs_[i][0]->shape(1)
+						* sqrt(pool_param.kernel_size())
+						* pool_param.kernel_size()) - 0.9769413041;
+			}
+			else{
+				execution_time = (1.82697e-5) * (InputSize * InputSize * bottom_vecs_[i][0]->shape(1)
+						* sqrt(pool_param.kernel_size())
+						* pool_param.kernel_size()) - 0.0784910958;
+			}
+		}
+		else if(TypeName == "LRN"){
+		}
+		else if(TypeName == "Concat"){
+			InputSize = (top_vecs_[i][0]->shape(1) * top_vecs_[i][0]->shape(2) * top_vecs_[i][0]->shape(3));
+			execution_time = (5.7274e-6) * (InputSize) - 0.0324475575;
+		}
+		else if(TypeName == "Dropout"){
+			execution_time = (7.28374e-5) * (InputSize) + 0.0086956667;
+		}
+		else if(TypeName == "InnerProduct"){
+			const InnerProductParameter& innerproduct_param = layer_param.inner_product_param();
+			InputSize *= innerproduct_param.num_output();
+			execution_time = (2.1836e-6) * (InputSize) + 1.5864451922;
+		}
+		else if(TypeName == "Softmax"){
+			execution_time = (1.753362e-4) * (InputSize) + 0.0126747067;
+		}
+		layers_[i]->set_exec_time_s(execution_time);
+	}
 }
 
 // Helper for Net::Init: add a new top blob to the net.

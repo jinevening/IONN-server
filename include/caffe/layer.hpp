@@ -291,6 +291,18 @@ class Layer {
     param_propagate_down_[param_id] = value;
   }
 
+  inline float get_exec_time_c(){
+	return exec_time_c_;
+  }
+  inline float get_exec_time_s(){
+	return exec_time_s_;
+  }
+  inline void set_exec_time_c(float c){
+	exec_time_c_ = c;
+  }
+  inline void set_exec_time_s(float s){
+	exec_time_s_ = s;
+  }
 
  protected:
   /** The protobuf that stores the layer parameters */
@@ -305,6 +317,10 @@ class Layer {
   /** The vector that indicates whether each top blob has a non-zero weight in
    *  the objective function. */
   vector<Dtype> loss_;
+
+  /** Predicted execution time */
+  float exec_time_c_;
+  float exec_time_s_;
 
   /** @brief Using the CPU device, compute the layer output. */
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
