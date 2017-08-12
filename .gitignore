@@ -97,3 +97,6 @@ LOCK
 LOG*
 CURRENT
 MANIFEST-*
+
+# ctags file
+tags
