@@ -13,7 +13,7 @@
 
 #include <boost/asio.hpp>
 
-#define BUFF_SIZE 16*1024*1024
+#define BUFF_SIZE 256*1024*1024
 #define PORT 7675
 
 using namespace caffe;  // NOLINT(build/namespaces)
@@ -255,6 +255,7 @@ void Classifier::Preprocess(const cv::Mat& img,
 }
 
 void server(boost::asio::io_service& io_service, unsigned short port){
+  cout << "Partitnoing Server Started on Port " << port << endl;
   tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
   for (;;)
   {
@@ -276,7 +277,7 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 	  cout << "Total size " << total_size << " bytes" << endl;
 	}
 	buffer_ptr += length;
-	cout << "Received data so far : " << buffer_ptr - buffer << endl;
+//	cout << "Received data so far : " << buffer_ptr - buffer << endl;
 	if (error == boost::asio::error::eof)
 	  break; // Connection closed cleanly by peer.
 	else if (error)
@@ -332,6 +333,7 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 
 int main(int argc, char** argv) {
 
+  google::InitGoogleLogging(argv[0]);
   try {
     boost::asio::io_service io_service;
     server(io_service, PORT);
