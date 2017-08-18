@@ -255,79 +255,91 @@ void Classifier::Preprocess(const cv::Mat& img,
 }
 
 void server(boost::asio::io_service& io_service, unsigned short port){
-  cout << "Partitnoing Server Started on Port " << port << endl;
-  tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
-  for (;;)
-  {
+  cout << "Partitioning Server Started on Port " << port << endl;
+
+  // Huge buffer. We will use this again and again.
+  unsigned char* buffer = new unsigned char[BUFF_SIZE];
+
+  for (;;) {
+    tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
     tcp::socket sock(io_service);
     a.accept(sock);
-    unsigned char* buffer = new unsigned char[BUFF_SIZE];
-    memset(buffer, 0, BUFF_SIZE);
-    unsigned char* buffer_ptr = buffer;
 
-    int total_size = 0;	// model + feature
-    int model_size = 0;
-    try {
-      // Receive Data
-      do {
-	boost::system::error_code error;
-	size_t length = sock.read_some(boost::asio::buffer(buffer_ptr, BUFF_SIZE), error);
-	if (buffer == buffer_ptr) {
-	  memcpy(&total_size, buffer, 4);
-	  cout << "Total size " << total_size << " bytes" << endl;
-	}
-	buffer_ptr += length;
-//	cout << "Received data so far : " << buffer_ptr - buffer << endl;
-	if (error == boost::asio::error::eof)
-	  break; // Connection closed cleanly by peer.
-	else if (error)
-	  throw boost::system::system_error(error); // Some other error.
-      } while ((buffer_ptr - buffer) < total_size + 8 );
+    for (;;) {
+      memset(buffer, 0, BUFF_SIZE);
+      unsigned char* buffer_ptr = buffer;
+
+      int total_size = 0;	// model + feature
+      int model_size = 0;
+
+      boost::system::error_code error;
+      try {
+	// Receive Data
+	do {
+	  size_t length = sock.read_some(boost::asio::buffer(buffer_ptr, BUFF_SIZE), error);
+	  if (error == boost::asio::error::eof)
+	    break; // Connection closed cleanly by peer.
+	  else if (error)
+	    throw boost::system::system_error(error); // Some other error.
+
+	  if (buffer == buffer_ptr) {
+	    memcpy(&total_size, buffer, 4);
+	    cout << "Total size " << total_size << " bytes" << endl;
+	  }
+	  buffer_ptr += length;
+  //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
+	} while ((buffer_ptr - buffer) < total_size + 8 );
+      }
+      catch (std::exception& e) {
+	std::cerr << "Exception in thread: " << e.what() << "\n";
+	return;
+      }
+
+      if (error == boost::asio::error::eof)
+	break;
+
+      cout << "Received " << buffer_ptr - buffer << " bytes" << endl;
+
+      CHECK_EQ(sizeof(int), 4);
+      memcpy(&model_size, buffer + 4, 4);
+
+      // Decode received data
+      NetParameter net_param;
+      BlobProto feature;
+      if (!(net_param.ParseFromArray(buffer + 8, model_size))) {
+	perror("Protobuf network decoding failed");
+	exit(EXIT_FAILURE);
+      }
+      if (!(feature.ParseFromArray(buffer + 8 + model_size, total_size - model_size))) {
+	perror("Protobuf feature decoding failed");
+	exit(EXIT_FAILURE);
+      }
+
+      // Initialize received network
+      Net<float> net(net_param);;
+      Blob<float>* input_layer = net.input_blobs()[0];
+      input_layer->FromProto(feature, true);
+
+      // Run forward
+      net.Forward();
+
+      // Get output data
+      Blob<float>* output_layer = net.output_blobs()[0];
+      BlobProto output_proto;
+      output_layer->ToProto(&output_proto);
+      int output_size = output_proto.ByteSize();
+      memcpy(buffer, &output_size, 4);
+      output_proto.SerializeWithCachedSizesToArray(buffer + 4);
+      // send(new_socket , buffer , output_size , 0 );
+      cout << "Output blob size : " << output_size << " bytes" << endl;
+
+      // Send output data to the client
+      int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, output_size + 4));
+      cout << "Sent " << sent_bytes << " bytes" << endl;
     }
-    catch (std::exception& e) {
-      std::cerr << "Exception in thread: " << e.what() << "\n";
-      return;
-    }
-    cout << "Received " << buffer_ptr - buffer << " bytes" << endl;
 
-    CHECK_EQ(sizeof(int), 4);
-    memcpy(&model_size, buffer + 4, 4);
-
-    // Decode received data
-    NetParameter net_param;
-    BlobProto feature;
-    if (!(net_param.ParseFromArray(buffer + 8, model_size))) {
-      perror("Protobuf network decoding failed");
-      exit(EXIT_FAILURE);
-    }
-    if (!(feature.ParseFromArray(buffer + 8 + model_size, total_size - model_size))) {
-      perror("Protobuf feature decoding failed");
-      exit(EXIT_FAILURE);
-    }
-
-    // Initialize received network
-    Net<float>* net = new Net<float>(net_param);
-    Blob<float>* input_layer = net->input_blobs()[0];
-    input_layer->FromProto(feature, true);
-
-    // Run forward
-    net->Forward();
-
-    // Get output data
-    Blob<float>* output_layer = net->output_blobs()[0];
-    BlobProto output_proto;
-    output_layer->ToProto(&output_proto);
-    int output_size = output_proto.ByteSize();
-    memcpy(buffer, &output_size, 4);
-    output_proto.SerializeWithCachedSizesToArray(buffer + 4);
-    // send(new_socket , buffer , output_size , 0 );
-    cout << "Output blob size : " << output_size << " bytes" << endl;
-
-    // Send output data to the client
-    int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, output_size + 4));
-    cout << "Sent " << sent_bytes << " bytes" << endl;
-
-    delete net;
+    // Connection closed by client
+    cout << "Client closed the connection" << endl;
   }
 }
 
