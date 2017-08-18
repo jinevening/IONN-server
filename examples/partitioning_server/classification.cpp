@@ -314,14 +314,27 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 	perror("Protobuf feature decoding failed");
 	exit(EXIT_FAILURE);
       }
+      double timechk;
+      struct timeval start;
+      struct timeval finish;
 
+      gettimeofday(&start, NULL);
       // Initialize received network
-      Net<float> net(net_param);;
+      Net<float> net(net_param);
       Blob<float>* input_layer = net.input_blobs()[0];
       input_layer->FromProto(feature, true);
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Server-side loading time : " << timechk << " s" << endl;
 
+      gettimeofday(&start, NULL);
       // Run forward
       net.Forward();
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Server-side forward time : " << timechk << " s" << endl;
 
       // Get output data
       Blob<float>* output_layer = net.output_blobs()[0];
