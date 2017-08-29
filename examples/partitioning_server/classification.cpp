@@ -358,6 +358,14 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 
 int main(int argc, char** argv) {
 
+#ifdef CPU_ONLY
+  Caffe::set_mode(Caffe::CPU);
+  cout << "CPU mode" << endl;
+#else
+  Caffe::set_mode(Caffe::GPU);
+  cout << "GPU mode" << endl;
+#endif
+
   google::InitGoogleLogging(argv[0]);
   try {
     boost::asio::io_service io_service;
