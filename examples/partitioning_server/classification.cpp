@@ -269,7 +269,8 @@ void server(boost::asio::io_service& io_service, unsigned short port){
       memset(buffer, 0, BUFF_SIZE);
       unsigned char* buffer_ptr = buffer;
 
-      int total_size = 0;	// model + feature
+      int total_size = 0;	// model + proto + feature
+      int proto_size = 0;
       int model_size = 0;
 
       boost::system::error_code error;
@@ -288,7 +289,7 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 	  }
 	  buffer_ptr += length;
   //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
-	} while ((buffer_ptr - buffer) < total_size + 8 );
+	} while ((buffer_ptr - buffer) < total_size + 12 );
       }
       catch (std::exception& e) {
 	std::cerr << "Exception in thread: " << e.what() << "\n";
@@ -301,32 +302,46 @@ void server(boost::asio::io_service& io_service, unsigned short port){
       cout << "Received " << buffer_ptr - buffer << " bytes" << endl;
 
       CHECK_EQ(sizeof(int), 4);
-      memcpy(&model_size, buffer + 4, 4);
+      memcpy(&proto_size, buffer + 4, 4);
+      memcpy(&model_size, buffer + 8, 4);
 
-      // Decode received data
-      NetParameter net_param;
-      BlobProto feature;
-      if (!(net_param.ParseFromArray(buffer + 8, model_size))) {
-	perror("Protobuf network decoding failed");
-	exit(EXIT_FAILURE);
-      }
-      if (!(feature.ParseFromArray(buffer + 8 + model_size, total_size - model_size))) {
-	perror("Protobuf feature decoding failed");
-	exit(EXIT_FAILURE);
-      }
       double timechk;
       struct timeval start;
       struct timeval finish;
 
       gettimeofday(&start, NULL);
+      // Decode received data
+      NetParameter proto_param;
+      if (!(proto_param.ParseFromArray(buffer + 12, proto_size))) {
+        perror("Protobuf prototxt decoding failed");
+        exit(EXIT_FAILURE);
+      }
+      NetParameter net_param;
+      if (!(net_param.ParseFromArray(buffer + 12 + proto_size, model_size))) {
+        perror("Protobuf network decoding failed");
+        exit(EXIT_FAILURE);
+      }
+      BlobProto feature;
+      if (!(feature.ParseFromArray(buffer + 12 + proto_size + model_size, total_size - model_size - proto_size))) {
+        perror("Protobuf feature decoding failed");
+        exit(EXIT_FAILURE);
+      }
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Server-side decode time : " << timechk << " s" << endl;
+
+      gettimeofday(&start, NULL);
       // Initialize received network
-      Net<float> net(net_param);
+//      Net<float> net(net_param);  // This way of loading is very slow
+      Net<float> net(proto_param);
+      net.CopyTrainedLayersFrom(net_param);
       Blob<float>* input_layer = net.input_blobs()[0];
       input_layer->FromProto(feature, true);
       gettimeofday(&finish, NULL);
       timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
                 (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-      cout << "Server-side loading time : " << timechk << " s" << endl;
+      cout << "Server-side Net creation time : " << timechk << " s" << endl;
 
       gettimeofday(&start, NULL);
       // Run forward
