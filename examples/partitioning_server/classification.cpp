@@ -260,18 +260,26 @@ void server(boost::asio::io_service& io_service, unsigned short port){
   // Huge buffer. We will use this again and again.
   unsigned char* buffer = new unsigned char[BUFF_SIZE];
 
+
   for (;;) {
     tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
     tcp::socket sock(io_service);
     a.accept(sock);
 
+    shared_ptr<Net<float> > net;
+
+    // Saved network parameter
+    // We will keep received network parameter here for incremental offloading
+    NetParameter saved_net_param;
+
     for (;;) {
       memset(buffer, 0, BUFF_SIZE);
       unsigned char* buffer_ptr = buffer;
 
-      int total_size = 0;	// model + proto + feature
+      int total_size = 0;	// proto + front_model + rear_model + feature
       int proto_size = 0;
-      int model_size = 0;
+      int front_model_size = 0;
+      int rear_model_size = 0;
 
       boost::system::error_code error;
       try {
@@ -289,7 +297,7 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 	  }
 	  buffer_ptr += length;
   //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
-	} while ((buffer_ptr - buffer) < total_size + 12 );
+	} while ((buffer_ptr - buffer) < total_size + 16 );
       }
       catch (std::exception& e) {
 	std::cerr << "Exception in thread: " << e.what() << "\n";
@@ -303,7 +311,8 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 
       CHECK_EQ(sizeof(int), 4);
       memcpy(&proto_size, buffer + 4, 4);
-      memcpy(&model_size, buffer + 8, 4);
+      memcpy(&front_model_size, buffer + 8, 4);
+      memcpy(&rear_model_size, buffer + 12, 4);
 
       double timechk;
       struct timeval start;
@@ -312,17 +321,26 @@ void server(boost::asio::io_service& io_service, unsigned short port){
       gettimeofday(&start, NULL);
       // Decode received data
       NetParameter proto_param;
-      if (!(proto_param.ParseFromArray(buffer + 12, proto_size))) {
+      if (!(proto_param.ParseFromArray(buffer + 16, proto_size))) {
         perror("Protobuf prototxt decoding failed");
         exit(EXIT_FAILURE);
       }
-      NetParameter net_param;
-      if (!(net_param.ParseFromArray(buffer + 12 + proto_size, model_size))) {
-        perror("Protobuf network decoding failed");
-        exit(EXIT_FAILURE);
+      NetParameter front_net_param;
+      if (front_model_size > 0) {
+        if (!(front_net_param.ParseFromArray(buffer + 16 + proto_size, front_model_size))) {
+          perror("Protobuf front network decoding failed");
+          exit(EXIT_FAILURE);
+        }
+      }
+      NetParameter rear_net_param;
+      if (rear_model_size > 0) {
+        if (!(rear_net_param.ParseFromArray(buffer + 16 + proto_size + front_model_size, rear_model_size))) {
+          perror("Protobuf rear network decoding failed");
+          exit(EXIT_FAILURE);
+        }
       }
       BlobProto feature;
-      if (!(feature.ParseFromArray(buffer + 12 + proto_size + model_size, total_size - model_size - proto_size))) {
+      if (!(feature.ParseFromArray(buffer + 16 + proto_size + front_model_size + rear_model_size, total_size - front_model_size - rear_model_size - proto_size))) {
         perror("Protobuf feature decoding failed");
         exit(EXIT_FAILURE);
       }
@@ -332,11 +350,26 @@ void server(boost::asio::io_service& io_service, unsigned short port){
       cout << "Server-side decode time : " << timechk << " s" << endl;
 
       gettimeofday(&start, NULL);
+
       // Initialize received network
-//      Net<float> net(net_param);  // This way of loading is very slow
-      Net<float> net(proto_param);
-      net.CopyTrainedLayersFrom(net_param);
-      Blob<float>* input_layer = net.input_blobs()[0];
+      // If front/rear model is arrived, we create a new network
+      // If not, we will just use the previous network
+      if (!(front_model_size == 0 && rear_model_size == 0)) {
+        net.reset(new Net<float>(proto_param));
+        if (front_model_size > 0) {
+          net->CopyTrainedLayersFrom(front_net_param);
+          net->CopyTrainedLayersFrom(saved_net_param);
+
+          if (rear_model_size > 0)  // both front model and rear model arrived
+            net->CopyTrainedLayersFrom(rear_net_param);
+        }
+        else {  // only rear model arrived
+          net->CopyTrainedLayersFrom(saved_net_param);
+          net->CopyTrainedLayersFrom(rear_net_param);
+        }
+      }
+
+      Blob<float>* input_layer = net->input_blobs()[0];
       input_layer->FromProto(feature, true);
       gettimeofday(&finish, NULL);
       timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
@@ -345,14 +378,14 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 
       gettimeofday(&start, NULL);
       // Run forward
-      net.Forward();
+      net->Forward();
       gettimeofday(&finish, NULL);
       timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
                 (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
       cout << "Server-side forward time : " << timechk << " s" << endl;
 
       // Get output data
-      Blob<float>* output_layer = net.output_blobs()[0];
+      Blob<float>* output_layer = net->output_blobs()[0];
       BlobProto output_proto;
       output_layer->ToProto(&output_proto);
       int output_size = output_proto.ByteSize();
@@ -364,6 +397,9 @@ void server(boost::asio::io_service& io_service, unsigned short port){
       // Send output data to the client
       int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, output_size + 4));
       cout << "Sent " << sent_bytes << " bytes" << endl;
+    
+      // Save current net parameter for later use (incremental offloading)
+      net->ToProto(&saved_net_param, false);
     }
 
     // Connection closed by client
