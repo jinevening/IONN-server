@@ -283,29 +283,29 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 
       boost::system::error_code error;
       try {
-	// Receive Data
-	do {
-	  size_t length = sock.read_some(boost::asio::buffer(buffer_ptr, BUFF_SIZE), error);
-	  if (error == boost::asio::error::eof)
-	    break; // Connection closed cleanly by peer.
-	  else if (error)
-	    throw boost::system::system_error(error); // Some other error.
+        // Receive Data
+        do {
+          size_t length = sock.read_some(boost::asio::buffer(buffer_ptr, BUFF_SIZE), error);
+          if (error == boost::asio::error::eof)
+            break; // Connection closed cleanly by peer.
+          else if (error)
+            throw boost::system::system_error(error); // Some other error.
 
-	  if (buffer == buffer_ptr) {
-	    memcpy(&total_size, buffer, 4);
-	    cout << "Total size " << total_size << " bytes" << endl;
-	  }
-	  buffer_ptr += length;
-  //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
-	} while ((buffer_ptr - buffer) < total_size + 16 );
+          if (buffer == buffer_ptr) {
+            memcpy(&total_size, buffer, 4);
+            cout << "Total size " << total_size << " bytes" << endl;
+          }
+          buffer_ptr += length;
+        //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
+        } while ((buffer_ptr - buffer) < total_size + 16 );
       }
       catch (std::exception& e) {
-	std::cerr << "Exception in thread: " << e.what() << "\n";
-	return;
+        std::cerr << "Exception in thread: " << e.what() << "\n";
+        return;
       }
 
       if (error == boost::asio::error::eof)
-	break;
+        break;
 
       cout << "Received " << buffer_ptr - buffer << " bytes" << endl;
 
@@ -369,12 +369,13 @@ void server(boost::asio::io_service& io_service, unsigned short port){
         }
       }
 
-      Blob<float>* input_layer = net->input_blobs()[0];
-      input_layer->FromProto(feature, true);
       gettimeofday(&finish, NULL);
       timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
                 (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
       cout << "Server-side Net creation time : " << timechk << " s" << endl;
+
+      Blob<float>* input_layer = net->input_blobs()[0];
+      input_layer->FromProto(feature, true);
 
       gettimeofday(&start, NULL);
       // Run forward
