@@ -29,8 +29,6 @@ class ExecutionGraphLayer {
      input_feature_size(0),
      output_feature_size(0),
      model_size(0),
-     exec_time_c(0.0),
-     exec_time_s(0.0),
      input_s(0.0),
      output_s(0.0)
     {}
@@ -47,7 +45,6 @@ class ExecutionGraphLayer {
   // model size of this layer (data to be transmitted)
   int model_size;
 
-  // execution time for client and server
   float exec_time_c;
   float exec_time_s;
 

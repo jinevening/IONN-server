@@ -43,10 +43,6 @@ Net<Dtype>::Net(const string& param_file, Phase phase,
 
 template <typename Dtype>
 void Net<Dtype>::Init(const NetParameter& in_param) {
-  double timechk;
-	struct timeval start;
-	struct timeval finish;
-	gettimeofday(&start, NULL);
   // Set phase from the state.
   phase_ = in_param.state().phase();
   // Filter layers based on their include/exclude rules and
@@ -71,16 +67,11 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   param_id_vecs_.resize(param.layer_size());
   top_id_vecs_.resize(param.layer_size());
   bottom_need_backward_.resize(param.layer_size());
-	gettimeofday(&finish, NULL);
-  timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-            (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-  std::cout << "Starting setup time : " << timechk << " s" << std::endl;
   for (int layer_id = 0; layer_id < param.layer_size(); ++layer_id) {
     // Inherit phase from net if unset.
     if (!param.layer(layer_id).has_phase()) {
       param.mutable_layer(layer_id)->set_phase(phase_);
     }
-	gettimeofday(&start, NULL);
     // Setup layer.
     const LayerParameter& layer_param = param.layer(layer_id);
     if (layer_param.propagate_down_size() > 0) {
@@ -169,12 +160,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
         blob_need_backward_[top_id_vecs_[layer_id][top_id]] = true;
       }
     }
-	gettimeofday(&finish, NULL);
-  timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-            (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-  std::cout << layer_param.name() << " layer creation time : " << timechk << " s" << std::endl;
   }
-	gettimeofday(&start, NULL);
   // Go through the net backwards to determine which blobs contribute to the
   // loss.  We can skip backward computation for blobs that don't contribute
   // to the loss.
@@ -268,11 +254,8 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   ShareWeights();
   debug_info_ = param.debug_info();
   server_predict();
+
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
-	gettimeofday(&finish, NULL);
-  timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-            (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-  std::cout << "Layer creation rear-part time : " << timechk << " s" << std::endl;
 }
 
 template <typename Dtype>

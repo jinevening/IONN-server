@@ -12,7 +12,9 @@
 #include <vector>
 
 #include <boost/asio.hpp>
+#include <boost/thread.hpp>
 
+#define FEATURE_BUFF_SIZE 64*1024*1024
 #define BUFF_SIZE 256*1024*1024
 #define PORT 7675
 
@@ -20,6 +22,12 @@ using namespace caffe;  // NOLINT(build/namespaces)
 using std::string;
 
 using boost::asio::ip::tcp;
+
+// Saved network parameter
+// We will keep received network parameter here for incremental offloading
+NetParameter saved_net_param;
+Net<float>* saved_net;
+int transmitted_bytes = 0; 
 
 /* Pair (label, confidence) representing a prediction. */
 typedef std::pair<string, float> Prediction;
@@ -254,29 +262,138 @@ void Classifier::Preprocess(const cv::Mat& img,
     << "Input channels are not wrapping the input layer of the network.";
 }
 
-void server(boost::asio::io_service& io_service, unsigned short port){
-  cout << "Partitioning Server Started on Port " << port << endl;
+void execution_server(unsigned short port){
+  Caffe::set_mode(Caffe::GPU);
+  boost::asio::io_service io_service;
+  tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
+  cout << "Execution Server Started on Port " << port << endl;
+
+  // Huge buffer. We will use this again and again.
+  unsigned char* buffer = new unsigned char[FEATURE_BUFF_SIZE];
+
+  for (;;)
+  {
+    tcp::socket sock(io_service);
+    a.accept(sock);
+
+    Net<float>* net;
+
+    int prev_transmitted_bytes = 0;
+
+    for (;;) {
+      memset(buffer, 0, FEATURE_BUFF_SIZE);
+      unsigned char* buffer_ptr = buffer;
+
+      int feature_size = 0;	// feature size
+
+      boost::system::error_code error;
+      try {
+        // Receive Data
+        do {
+          size_t length = sock.read_some(boost::asio::buffer(buffer_ptr, FEATURE_BUFF_SIZE), error);
+          if (error == boost::asio::error::eof)
+            break; // Connection closed cleanly by peer.
+          else if (error)
+            throw boost::system::system_error(error); // Some other error.
+
+          if (buffer == buffer_ptr) {
+            memcpy(&feature_size, buffer, 4);
+            cout << "Total size " << feature_size << " bytes" << endl;
+          }
+          buffer_ptr += length;
+        	//cout << "Execution thread" << endl;
+        //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
+        } while ((buffer_ptr - buffer) < feature_size + 4 );
+      }
+      catch (std::exception& e) {
+        std::cerr << "Exception in thread: " << e.what() << "\n";
+        return;
+      }
+
+      if (error == boost::asio::error::eof)
+        break;
+
+      cout << "Received " << buffer_ptr - buffer << " bytes" << endl;
+
+      CHECK_EQ(sizeof(int), 4);
+
+      double timechk;
+      struct timeval start;
+      struct timeval finish;
+
+      gettimeofday(&start, NULL);
+      // Decode received data
+      BlobProto feature;
+      if (!(feature.ParseFromArray(buffer + 4, feature_size))) {
+        perror("Protobuf feature decoding failed");
+        exit(EXIT_FAILURE);
+      }
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Server-side decode time : " << timechk << " s" << endl;
+
+      // If more bytes have been uploaded,
+      // then we update the model to the latest one
+      if (prev_transmitted_bytes != transmitted_bytes) {
+        prev_transmitted_bytes = transmitted_bytes;
+//        net.reset(saved_net);
+        net = saved_net;
+      }
+
+      Blob<float>* input_layer = net->input_blobs()[0];
+      input_layer->FromProto(feature, false);
+
+      gettimeofday(&start, NULL);
+      // Run forward
+      net->Forward();
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Server-side forward time : " << timechk << " s" << endl;
+
+      // Get output data
+      Blob<float>* output_layer = net->output_blobs()[0];
+      BlobProto output_proto;
+      output_layer->ToProto(&output_proto);
+      int output_size = output_proto.ByteSize();
+      memcpy(buffer, &output_size, 4);
+      output_proto.SerializeWithCachedSizesToArray(buffer + 4);
+      // send(new_socket , buffer , output_size , 0 );
+      cout << "Output blob size : " << output_size << " bytes" << endl;
+
+      // Send output data to the client
+      int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, output_size + 4));
+      cout << "Sent " << sent_bytes << " bytes" << endl;
+    }
+
+    // Connection closed by client
+    cout << "Client closed the connection" << endl;
+  }
+}
+
+void upload_server(int port)
+{
+  boost::asio::io_service io_service;
+  tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
+  cout << "Upload Server Started on Port " << port << endl;
 
   // Huge buffer. We will use this again and again.
   unsigned char* buffer = new unsigned char[BUFF_SIZE];
 
-
-  for (;;) {
-    tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
+  for (;;)
+  {
     tcp::socket sock(io_service);
     a.accept(sock);
+    std::cout << "a client connected" << std::endl;
 
-    shared_ptr<Net<float> > net;
-
-    // Saved network parameter
-    // We will keep received network parameter here for incremental offloading
-    NetParameter saved_net_param;
+    Net<float>* net;
 
     for (;;) {
       memset(buffer, 0, BUFF_SIZE);
       unsigned char* buffer_ptr = buffer;
 
-      int total_size = 0;	// proto + front_model + rear_model + feature
+      int total_size = 0;	// proto + front_model + rear_model
       int proto_size = 0;
       int front_model_size = 0;
       int rear_model_size = 0;
@@ -296,6 +413,7 @@ void server(boost::asio::io_service& io_service, unsigned short port){
             cout << "Total size " << total_size << " bytes" << endl;
           }
           buffer_ptr += length;
+        	//cout << "Uploading thread" << endl;
         //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
         } while ((buffer_ptr - buffer) < total_size + 16 );
       }
@@ -339,11 +457,6 @@ void server(boost::asio::io_service& io_service, unsigned short port){
           exit(EXIT_FAILURE);
         }
       }
-      BlobProto feature;
-      if (!(feature.ParseFromArray(buffer + 16 + proto_size + front_model_size + rear_model_size, total_size - front_model_size - rear_model_size - proto_size))) {
-        perror("Protobuf feature decoding failed");
-        exit(EXIT_FAILURE);
-      }
       gettimeofday(&finish, NULL);
       timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
                 (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
@@ -351,11 +464,15 @@ void server(boost::asio::io_service& io_service, unsigned short port){
 
       gettimeofday(&start, NULL);
 
+      CHECK(!(front_model_size == 0 && rear_model_size == 0));
+
       // Initialize received network
       // If front/rear model is arrived, we create a new network
       // If not, we will just use the previous network
-      if (!(front_model_size == 0 && rear_model_size == 0)) {
-        net.reset(new Net<float>(proto_param));
+//      if (!(front_model_size == 0 && rear_model_size == 0)) {
+        Net<float>* new_net = new Net<float>(proto_param);
+//        net.reset(new_net);
+        net = new_net;
         if (front_model_size > 0) {
           net->CopyTrainedLayersFrom(front_net_param);
           net->CopyTrainedLayersFrom(saved_net_param);
@@ -367,44 +484,26 @@ void server(boost::asio::io_service& io_service, unsigned short port){
           net->CopyTrainedLayersFrom(saved_net_param);
           net->CopyTrainedLayersFrom(rear_net_param);
         }
-      }
+//      }
 
       gettimeofday(&finish, NULL);
       timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
                 (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
       cout << "Server-side Net creation time : " << timechk << " s" << endl;
 
-      Blob<float>* input_layer = net->input_blobs()[0];
-      input_layer->FromProto(feature, true);
-
-      gettimeofday(&start, NULL);
-      // Run forward
-      net->Forward();
-      gettimeofday(&finish, NULL);
-      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-      cout << "Server-side forward time : " << timechk << " s" << endl;
-
-      // Get output data
-      Blob<float>* output_layer = net->output_blobs()[0];
-      BlobProto output_proto;
-      output_layer->ToProto(&output_proto);
-      int output_size = output_proto.ByteSize();
-      memcpy(buffer, &output_size, 4);
-      output_proto.SerializeWithCachedSizesToArray(buffer + 4);
-      // send(new_socket , buffer , output_size , 0 );
-      cout << "Output blob size : " << output_size << " bytes" << endl;
-
-      // Send output data to the client
-      int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, output_size + 4));
+      // Send ACK to the client
+      buffer[0] = 'A';
+      buffer[1] = 'C';
+      buffer[2] = 'K';
+      int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, 3));
       cout << "Sent " << sent_bytes << " bytes" << endl;
+
+      saved_net = new_net;
+      transmitted_bytes = total_size;
     
       // Save current net parameter for later use (incremental offloading)
       net->ToProto(&saved_net_param, false);
     }
-
-    // Connection closed by client
-    cout << "Client closed the connection" << endl;
   }
 }
 
@@ -420,8 +519,12 @@ int main(int argc, char** argv) {
 
   google::InitGoogleLogging(argv[0]);
   try {
-    boost::asio::io_service io_service;
-    server(io_service, PORT);
+//    boost::asio::io_service io_service;
+//    server(io_service, PORT);
+    boost::thread_group threads;
+    threads.create_thread(boost::bind(upload_server, 7675));
+    threads.create_thread(boost::bind(execution_server, 7676));
+    threads.join_all();
   }
   catch (std::exception& e) {
     std::cerr << "Exception : " << e.what() << endl;
