@@ -1,7 +1,16 @@
+//<<<<<<< HEAD
+//#include <string>
+//#include <vector>
+
+//#include "hdf5/serial/hdf5.h"
+//=======
+#ifdef USE_HDF5
 #include <string>
 #include <vector>
 
 #include "hdf5/serial/hdf5.h"
+//#include "hdf5.h"
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 #include "gtest/gtest.h"
 
@@ -163,3 +172,7 @@ TYPED_TEST(HDF5DataLayerTest, TestSkip) {
 }
 
 }  // namespace caffe
+//<<<<<<< HEAD
+//=======
+#endif  // USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383

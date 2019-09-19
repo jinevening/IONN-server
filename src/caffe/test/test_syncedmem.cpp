@@ -80,7 +80,11 @@ TEST_F(SyncedMemoryTest, TestGPURead) {
   char* recovered_value = new char[10];
   caffe_gpu_memcpy(10, gpu_data, recovered_value);
   for (int i = 0; i < mem.size(); ++i) {
-    EXPECT_EQ((static_cast<char*>(recovered_value))[i], 1);
+//<<<<<<< HEAD
+//    EXPECT_EQ((static_cast<char*>(recovered_value))[i], 1);
+//=======
+    EXPECT_EQ(recovered_value[i], 1);
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   }
   // do another round
   cpu_data = mem.mutable_cpu_data();
@@ -94,7 +98,11 @@ TEST_F(SyncedMemoryTest, TestGPURead) {
   // check if values are the same
   caffe_gpu_memcpy(10, gpu_data, recovered_value);
   for (int i = 0; i < mem.size(); ++i) {
-    EXPECT_EQ((static_cast<char*>(recovered_value))[i], 2);
+//<<<<<<< HEAD
+//    EXPECT_EQ((static_cast<char*>(recovered_value))[i], 2);
+//=======
+    EXPECT_EQ(recovered_value[i], 2);
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   }
   delete[] recovered_value;
 }

@@ -193,7 +193,13 @@ void BaseConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   // TODO: generalize to handle inputs of different shapes.
   for (int bottom_id = 1; bottom_id < bottom.size(); ++bottom_id) {
     CHECK(bottom[0]->shape() == bottom[bottom_id]->shape())
-        << "All inputs must have the same shape.";
+//<<<<<<< HEAD
+//        << "All inputs must have the same shape.";
+//=======
+        << "shape mismatch - bottom[0]: " << bottom[0]->shape_string()
+        << " vs. bottom[" << bottom_id << "]: "
+        << bottom[bottom_id]->shape_string();
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   }
   // Shape the tops.
   bottom_shape_ = &bottom[0]->shape();

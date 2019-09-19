@@ -68,6 +68,11 @@ class AccuracyLayer : public Layer<Dtype> {
    */
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
+//<<<<<<< HEAD
+//=======
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 
   /// @brief Not implemented -- AccuracyLayer cannot be used as a loss.
@@ -77,6 +82,11 @@ class AccuracyLayer : public Layer<Dtype> {
       if (propagate_down[i]) { NOT_IMPLEMENTED; }
     }
   }
+//<<<<<<< HEAD
+//=======
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
   int label_axis_, outer_num_, inner_num_;
 

@@ -106,7 +106,11 @@ if $WITH_CUDA ; then
   ln -s /usr/local/cuda-$CUDA_VERSION /usr/local/cuda
 
   if $WITH_CUDNN ; then
-    apt-get install -y --no-install-recommends libcudnn6-dev
+#<<<<<<< HEAD
+#    apt-get install -y --no-install-recommends libcudnn6-dev
+#=======
+    apt-get install -y --no-install-recommends libcudnn7-dev
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   fi
 fi
 

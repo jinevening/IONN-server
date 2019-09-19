@@ -63,8 +63,13 @@ def time(solver, nccl):
 
 
 def solve(proto, snapshot, gpus, timing, uid, rank):
-    caffe.set_mode_gpu()
+#<<<<<<< HEAD
+#    caffe.set_mode_gpu()
+#    caffe.set_device(gpus[rank])
+#=======
     caffe.set_device(gpus[rank])
+    caffe.set_mode_gpu()
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
     caffe.set_solver_count(len(gpus))
     caffe.set_solver_rank(rank)
     caffe.set_multiprocess(True)

@@ -1,5 +1,15 @@
+//<<<<<<< HEAD
+//#include <vector>
+
+//#include "hdf5/serial/hdf5.h"
+//#include "hdf5/serial/hdf5_hl.h"
+//=======
+#ifdef USE_HDF5
 #include <vector>
 
+//#include "hdf5.h"
+//#include "hdf5_hl.h"
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 #include "hdf5/serial/hdf5.h"
 #include "hdf5/serial/hdf5_hl.h"
 
@@ -37,3 +47,7 @@ void HDF5OutputLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 INSTANTIATE_LAYER_GPU_FUNCS(HDF5OutputLayer);
 
 }  // namespace caffe
+//<<<<<<< HEAD
+//=======
+#endif  // USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383

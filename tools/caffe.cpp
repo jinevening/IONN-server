@@ -233,6 +233,16 @@ int train() {
         GetRequestedAction(FLAGS_sigint_effect),
         GetRequestedAction(FLAGS_sighup_effect));
 
+//<<<<<<< HEAD
+//=======
+  if (FLAGS_snapshot.size()) {
+    solver_param.clear_weights();
+  } else if (FLAGS_weights.size()) {
+    solver_param.clear_weights();
+    solver_param.add_weights(FLAGS_weights);
+  }
+
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   shared_ptr<caffe::Solver<float> >
       solver(caffe::SolverRegistry<float>::CreateSolver(solver_param));
 
@@ -241,8 +251,11 @@ int train() {
   if (FLAGS_snapshot.size()) {
     LOG(INFO) << "Resuming from " << FLAGS_snapshot;
     solver->Restore(FLAGS_snapshot.c_str());
-  } else if (FLAGS_weights.size()) {
-    CopyLayers(solver.get(), FLAGS_weights);
+//<<<<<<< HEAD
+//  } else if (FLAGS_weights.size()) {
+//    CopyLayers(solver.get(), FLAGS_weights);
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   }
 
   LOG(INFO) << "Starting Optimization";

@@ -15,6 +15,14 @@ __global__ void EmbedForward(const int nthreads, const Dtype* bottom_data,
     const int n = top_index / N;
     const int d = top_index % N;
     const int index = static_cast<int>(bottom_data[n]);
+//<<<<<<< HEAD
+//=======
+    #ifdef DEBUG
+        assert(index >= 0);
+        assert(index < K);
+        assert(static_cast<Dtype>(index) == bottom_data[n]);
+    #endif
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
     const int weight_index = index * N + d;
     top_data[top_index] = weight[weight_index];
   }

@@ -79,6 +79,9 @@ STUB_GPU(DeconvolutionLayer);
 #endif
 
 INSTANTIATE_CLASS(DeconvolutionLayer);
-REGISTER_LAYER_CLASS(Deconvolution);
+//<<<<<<< HEAD
+//REGISTER_LAYER_CLASS(Deconvolution);
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 }  // namespace caffe

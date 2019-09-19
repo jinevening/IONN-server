@@ -1,7 +1,11 @@
 #ifndef CAFFE_HDF5_DATA_LAYER_HPP_
 #define CAFFE_HDF5_DATA_LAYER_HPP_
 
+//<<<<<<< HEAD
 #include "hdf5/serial/hdf5.h"
+//=======
+//#include "hdf5.h"
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 #include <string>
 #include <vector>

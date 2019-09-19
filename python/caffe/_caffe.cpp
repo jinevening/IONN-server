@@ -416,11 +416,19 @@ BOOST_PYTHON_MODULE(_caffe) {
     .def("reshape", &Net<Dtype>::Reshape)
     .def("clear_param_diffs", &Net<Dtype>::ClearParamDiffs)
     // The cast is to select a particular overload.
-    .def("copy_from", static_cast<void (Net<Dtype>::*)(const string)>(
+//<<<<<<< HEAD
+//    .def("copy_from", static_cast<void (Net<Dtype>::*)(const string)>(
+//        &Net<Dtype>::CopyTrainedLayersFrom))
+//   .def("share_with", &Net<Dtype>::ShareTrainedLayersWith)
+//    .def("get_intermediate_graph", bp::make_function(&Net<Dtype>::get_intermediate_graph,
+//        bp::return_value_policy<bp::copy_const_reference>()))
+//=======
+    .def("copy_from", static_cast<void (Net<Dtype>::*)(const string&)>(
         &Net<Dtype>::CopyTrainedLayersFrom))
     .def("share_with", &Net<Dtype>::ShareTrainedLayersWith)
     .def("get_intermediate_graph", bp::make_function(&Net<Dtype>::get_intermediate_graph,
         bp::return_value_policy<bp::copy_const_reference>()))
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
     .add_property("_blob_loss_weights", bp::make_function(
         &Net<Dtype>::blob_loss_weights, bp::return_internal_reference<>()))
     .def("_bottom_ids", bp::make_function(&Net<Dtype>::bottom_ids,
@@ -466,6 +474,17 @@ BOOST_PYTHON_MODULE(_caffe) {
     .add_property("count",    static_cast<int (Blob<Dtype>::*)() const>(
         &Blob<Dtype>::count))
     .def("reshape",           bp::raw_function(&Blob_Reshape))
+//<<<<<<< HEAD
+//=======
+#ifndef CPU_ONLY
+    .add_property("_gpu_data_ptr",
+        reinterpret_cast<uintptr_t (Blob<Dtype>::*)()>(
+          &Blob<Dtype>::mutable_gpu_data))
+    .add_property("_gpu_diff_ptr",
+        reinterpret_cast<uintptr_t (Blob<Dtype>::*)()>(
+          &Blob<Dtype>::mutable_gpu_diff))
+#endif
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
     .add_property("data",     bp::make_function(&Blob<Dtype>::mutable_cpu_data,
           NdarrayCallPolicies()))
     .add_property("diff",     bp::make_function(&Blob<Dtype>::mutable_cpu_diff,
@@ -484,7 +503,11 @@ BOOST_PYTHON_MODULE(_caffe) {
   bp::class_<SolverParameter>("SolverParameter", bp::no_init)
     .add_property("max_iter", &SolverParameter::max_iter)
     .add_property("display", &SolverParameter::display)
+//<<<<<<< HEAD
     .add_property("layer_wise_reduce", &SolverParameter::layer_wise_reduce);
+    .add_property("base_lr", &SolverParameter::base_lr,
+           &SolverParameter::set_base_lr);
+
   bp::class_<LayerParameter>("LayerParameter", bp::no_init);
 
   bp::class_<ExecutionGraphLayer>("ExecutionGraphLayer", bp::no_init)
@@ -495,6 +518,13 @@ BOOST_PYTHON_MODULE(_caffe) {
     .add_property("exec_times", bp::make_function(&ExecutionGraphLayer::exec_times_,
           bp::return_internal_reference<>()))
 
+//=======
+//    .add_property("layer_wise_reduce", &SolverParameter::layer_wise_reduce)
+//    .add_property("base_lr", &SolverParameter::base_lr,
+//           &SolverParameter::set_base_lr);
+//  bp::class_<LayerParameter>("LayerParameter", bp::no_init);
+
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   bp::class_<Solver<Dtype>, shared_ptr<Solver<Dtype> >, boost::noncopyable>(
     "Solver", bp::no_init)
     .add_property("net", &Solver<Dtype>::net)
@@ -509,12 +539,19 @@ BOOST_PYTHON_MODULE(_caffe) {
     .def("restore", &Solver<Dtype>::Restore)
     .def("snapshot", &Solver<Dtype>::Snapshot)
     .def("share_weights", &share_weights)
+//<<<<<<< HEAD
+//    .add_property("param", bp::make_function(&Solver<Dtype>::param,
+//              bp::return_value_policy<bp::copy_const_reference>()));
+//=======
+    .def("apply_update", &Solver<Dtype>::ApplyUpdate)
     .add_property("param", bp::make_function(&Solver<Dtype>::param,
-              bp::return_value_policy<bp::copy_const_reference>()));
+              bp::return_internal_reference<>()));
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   BP_REGISTER_SHARED_PTR_TO_PYTHON(Solver<Dtype>);
 
   bp::class_<SGDSolver<Dtype>, bp::bases<Solver<Dtype> >,
     shared_ptr<SGDSolver<Dtype> >, boost::noncopyable>(
+/*<<<<<<< HEAD
         "SGDSolver", bp::init<string>());
   bp::class_<NesterovSolver<Dtype>, bp::bases<Solver<Dtype> >,
     shared_ptr<NesterovSolver<Dtype> >, boost::noncopyable>(
@@ -529,6 +566,23 @@ BOOST_PYTHON_MODULE(_caffe) {
     shared_ptr<AdaDeltaSolver<Dtype> >, boost::noncopyable>(
         "AdaDeltaSolver", bp::init<string>());
   bp::class_<AdamSolver<Dtype>, bp::bases<Solver<Dtype> >,
+=======*/
+        "SGDSolver", bp::init<string>())
+        .add_property("lr", &SGDSolver<Dtype>::GetLearningRate);
+  bp::class_<NesterovSolver<Dtype>, bp::bases<SGDSolver<Dtype> >,
+    shared_ptr<NesterovSolver<Dtype> >, boost::noncopyable>(
+        "NesterovSolver", bp::init<string>());
+  bp::class_<AdaGradSolver<Dtype>, bp::bases<SGDSolver<Dtype> >,
+    shared_ptr<AdaGradSolver<Dtype> >, boost::noncopyable>(
+        "AdaGradSolver", bp::init<string>());
+  bp::class_<RMSPropSolver<Dtype>, bp::bases<SGDSolver<Dtype> >,
+    shared_ptr<RMSPropSolver<Dtype> >, boost::noncopyable>(
+        "RMSPropSolver", bp::init<string>());
+  bp::class_<AdaDeltaSolver<Dtype>, bp::bases<SGDSolver<Dtype> >,
+    shared_ptr<AdaDeltaSolver<Dtype> >, boost::noncopyable>(
+        "AdaDeltaSolver", bp::init<string>());
+  bp::class_<AdamSolver<Dtype>, bp::bases<SGDSolver<Dtype> >,
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
     shared_ptr<AdamSolver<Dtype> >, boost::noncopyable>(
         "AdamSolver", bp::init<string>());
 
@@ -553,8 +607,11 @@ BOOST_PYTHON_MODULE(_caffe) {
     .def(bp::vector_indexing_suite<vector<shared_ptr<Net<Dtype> > >, true>());
   bp::class_<vector<bool> >("BoolVec")
     .def(bp::vector_indexing_suite<vector<bool> >());
+//<<<<<<< HEAD
   bp::class_<vector<ExecutionGraphLayer*> >("ExecutionGraphLayerVec")
     .def(bp::vector_indexing_suite<vector<ExecutionGraphLayer*>, true>());
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
   bp::class_<NCCL<Dtype>, shared_ptr<NCCL<Dtype> >,
     boost::noncopyable>("NCCL",

@@ -23,7 +23,11 @@ class Classifier(caffe.Net):
     def __init__(self, model_file, pretrained_file, image_dims=None,
                  mean=None, input_scale=None, raw_scale=None,
                  channel_swap=None):
-        caffe.Net.__init__(self, model_file, pretrained_file, caffe.TEST)
+#<<<<<<< HEAD
+#        caffe.Net.__init__(self, model_file, pretrained_file, caffe.TEST)
+#=======
+        caffe.Net.__init__(self, model_file, caffe.TEST, weights=pretrained_file)
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
         # configure pre-processing
         in_ = self.inputs[0]
@@ -92,7 +96,11 @@ class Classifier(caffe.Net):
 
         # For oversampling, average predictions across crops.
         if oversample:
-            predictions = predictions.reshape((len(predictions) / 10, 10, -1))
+#<<<<<<< HEAD
+#            predictions = predictions.reshape((len(predictions) / 10, 10, -1))
+#=======
+            predictions = predictions.reshape((len(predictions) // 10, 10, -1))
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
             predictions = predictions.mean(1)
 
         return predictions

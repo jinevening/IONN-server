@@ -291,6 +291,7 @@ class Layer {
     param_propagate_down_[param_id] = value;
   }
 
+//<<<<<<< HEAD
   inline float get_exec_time_c(){
 	return exec_time_c_;
   }
@@ -303,6 +304,8 @@ class Layer {
   inline void set_exec_time_s(float s){
 	exec_time_s_ = s;
   }
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
  protected:
   /** The protobuf that stores the layer parameters */
@@ -318,10 +321,13 @@ class Layer {
    *  the objective function. */
   vector<Dtype> loss_;
 
+//<<<<<<< HEAD
   /** Predicted execution time */
   float exec_time_c_;
   float exec_time_s_;
 
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   /** @brief Using the CPU device, compute the layer output. */
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) = 0;

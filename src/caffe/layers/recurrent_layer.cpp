@@ -214,8 +214,14 @@ void RecurrentLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     const int bottom_offset = 2 + static_input_;
     for (int i = bottom_offset, j = 0; i < bottom.size(); ++i, ++j) {
       CHECK(recur_input_blobs_[j]->shape() == bottom[i]->shape())
-          << "bottom[" << i << "] shape must match hidden state input shape: "
-          << recur_input_blobs_[j]->shape_string();
+//<<<<<<< HEAD
+//          << "bottom[" << i << "] shape must match hidden state input shape: "
+//          << recur_input_blobs_[j]->shape_string();
+//=======
+          << "shape mismatch - recur_input_blobs_[" << j << "]: "
+          << recur_input_blobs_[j]->shape_string()
+          << " vs. bottom[" << i << "]: " << bottom[i]->shape_string();
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
       recur_input_blobs_[j]->ShareData(*bottom[i]);
     }
   }

@@ -1,3 +1,7 @@
+//<<<<<<< HEAD
+//=======
+#ifdef USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 /*
 TODO:
 - load file in a separate thread ("prefetch")
@@ -10,8 +14,13 @@ TODO:
 #include <string>
 #include <vector>
 
+//<<<<<<< HEAD
 #include "hdf5/serial/hdf5.h"
 #include "hdf5/serial/hdf5_hl.h"
+//=======
+//#include "hdf5.h"
+//#include "hdf5_hl.h"
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 #include "stdint.h"
 
 #include "caffe/layers/hdf5_data_layer.hpp"
@@ -184,3 +193,7 @@ INSTANTIATE_CLASS(HDF5DataLayer);
 REGISTER_LAYER_CLASS(HDF5Data);
 
 }  // namespace caffe
+//<<<<<<< HEAD
+//=======
+#endif  // USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383

@@ -1,3 +1,7 @@
+//<<<<<<< HEAD
+//=======
+#ifdef USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 #include <string>
 #include <vector>
 
@@ -120,3 +124,7 @@ TYPED_TEST(HDF5OutputLayerTest, TestForward) {
 }
 
 }  // namespace caffe
+//<<<<<<< HEAD
+//=======
+#endif  // USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383

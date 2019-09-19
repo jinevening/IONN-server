@@ -119,6 +119,11 @@ function(caffe_print_configuration_summary)
   caffe_status("  USE_LMDB          :   ${USE_LMDB}")
   caffe_status("  USE_NCCL          :   ${USE_NCCL}")
   caffe_status("  ALLOW_LMDB_NOLOCK :   ${ALLOW_LMDB_NOLOCK}")
+  #<<<<<<< HEAD
+  #=======
+  # This code is taken from https://github.com/sh1r0/caffe-android-lib
+  caffe_status("  USE_HDF5          :   ${USE_HDF5}")
+  #>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   caffe_status("")
   caffe_status("Dependencies:")
   caffe_status("  BLAS              : " APPLE THEN "Yes (vecLib)" ELSE "Yes (${BLAS})")

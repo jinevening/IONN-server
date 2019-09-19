@@ -178,11 +178,20 @@ ifneq ($(CPU_ONLY), 1)
 	LIBRARIES := cudart cublas curand
 endif
 
-LIBRARIES += glog gflags protobuf boost_system boost_filesystem m hdf5_hl hdf5 boost_thread
+#<<<<<<< HEAD
+#LIBRARIES += glog gflags protobuf boost_system boost_filesystem m hdf5_hl hdf5 boost_thread
+#=======
+LIBRARIES += glog gflags protobuf boost_system boost_filesystem m
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 # handle IO dependencies
 USE_LEVELDB ?= 1
 USE_LMDB ?= 1
+#<<<<<<< HEAD
+#=======
+# This code is taken from https://github.com/sh1r0/caffe-android-lib
+USE_HDF5 ?= 1
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 USE_OPENCV ?= 1
 
 ifeq ($(USE_LEVELDB), 1)
@@ -191,6 +200,13 @@ endif
 ifeq ($(USE_LMDB), 1)
 	LIBRARIES += lmdb
 endif
+#<<<<<<< HEAD
+#=======
+# This code is taken from https://github.com/sh1r0/caffe-android-lib
+ifeq ($(USE_HDF5), 1)
+	LIBRARIES += hdf5_hl hdf5
+endif
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 ifeq ($(USE_OPENCV), 1)
 	LIBRARIES += opencv_core opencv_highgui opencv_imgproc
 
@@ -347,6 +363,13 @@ ifeq ($(ALLOW_LMDB_NOLOCK), 1)
 	COMMON_FLAGS += -DALLOW_LMDB_NOLOCK
 endif
 endif
+#<<<<<<< HEAD
+#=======
+# This code is taken from https://github.com/sh1r0/caffe-android-lib
+ifeq ($(USE_HDF5), 1)
+	COMMON_FLAGS += -DUSE_HDF5
+endif
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 # CPU-only configuration
 ifeq ($(CPU_ONLY), 1)
@@ -412,7 +435,11 @@ CXXFLAGS += -MMD -MP
 # Complete build flags.
 COMMON_FLAGS += $(foreach includedir,$(INCLUDE_DIRS),-I$(includedir))
 CXXFLAGS += -pthread -fPIC $(COMMON_FLAGS) $(WARNINGS)
-NVCCFLAGS += -ccbin=$(CXX) -Xcompiler -fPIC $(COMMON_FLAGS) -Wno-deprecated-gpu-targets
+#<<<<<<< HEAD
+#NVCCFLAGS += -ccbin=$(CXX) -Xcompiler -fPIC $(COMMON_FLAGS) -Wno-deprecated-gpu-targets
+#=======
+NVCCFLAGS += -ccbin=$(CXX) -Xcompiler -fPIC $(COMMON_FLAGS)
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 # mex may invoke an older gcc that is too liberal with -Wuninitalized
 MATLAB_CXXFLAGS := $(CXXFLAGS) -Wno-uninitialized
 LINKFLAGS += -pthread -fPIC $(COMMON_FLAGS) $(WARNINGS)
@@ -577,7 +604,11 @@ $(STATIC_NAME): $(OBJS) | $(LIB_BUILD_DIR)
 	@ echo AR -o $@
 	$(Q)ar rcs $@ $(OBJS)
 
-$(BUILD_DIR)/%.o: %.cpp | $(ALL_BUILD_DIRS)
+#<<<<<<< HEAD
+#$(BUILD_DIR)/%.o: %.cpp | $(ALL_BUILD_DIRS)
+#=======
+$(BUILD_DIR)/%.o: %.cpp $(PROTO_GEN_HEADER) | $(ALL_BUILD_DIRS)
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 	@ echo CXX $<
 	$(Q)$(CXX) $< $(CXXFLAGS) -c -o $@ 2> $@.$(WARNS_EXT) \
 		|| (cat $@.$(WARNS_EXT); exit 1)
@@ -641,7 +672,11 @@ $(PROTO_BUILD_DIR)/%.pb.cc $(PROTO_BUILD_DIR)/%.pb.h : \
 $(PY_PROTO_BUILD_DIR)/%_pb2.py : $(PROTO_SRC_DIR)/%.proto \
 		$(PY_PROTO_INIT) | $(PY_PROTO_BUILD_DIR)
 	@ echo PROTOC \(python\) $<
-	$(Q)protoc --proto_path=$(PROTO_SRC_DIR) --python_out=$(PY_PROTO_BUILD_DIR) $<
+#<<<<<<< HEAD
+#	$(Q)protoc --proto_path=$(PROTO_SRC_DIR) --python_out=$(PY_PROTO_BUILD_DIR) $<
+#=======
+	$(Q)protoc --proto_path=src --python_out=python $<
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 $(PY_PROTO_INIT): | $(PY_PROTO_BUILD_DIR)
 	touch $(PY_PROTO_INIT)
@@ -694,6 +729,10 @@ $(DISTRIBUTE_DIR): all py | $(DISTRIBUTE_SUBDIRS)
 	install -m 644 $(DYNAMIC_NAME) $(DISTRIBUTE_DIR)/lib
 	cd $(DISTRIBUTE_DIR)/lib; rm -f $(DYNAMIC_NAME_SHORT);   ln -s $(DYNAMIC_VERSIONED_NAME_SHORT) $(DYNAMIC_NAME_SHORT)
 	# add python - it's not the standard way, indeed...
-	cp -r python $(DISTRIBUTE_DIR)/python
+#<<<<<<< HEAD
+#	cp -r python $(DISTRIBUTE_DIR)/python
+#=======
+	cp -r python $(DISTRIBUTE_DIR)/
+#>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 -include $(DEPS)

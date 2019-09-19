@@ -122,9 +122,15 @@ class Net {
    *        another Net.
    */
   void CopyTrainedLayersFrom(const NetParameter& param);
-  void CopyTrainedLayersFrom(const string trained_filename);
-  void CopyTrainedLayersFromBinaryProto(const string trained_filename);
-  void CopyTrainedLayersFromHDF5(const string trained_filename);
+//<<<<<<< HEAD
+//  void CopyTrainedLayersFrom(const string trained_filename);
+//  void CopyTrainedLayersFromBinaryProto(const string trained_filename);
+//  void CopyTrainedLayersFromHDF5(const string trained_filename);
+//=======
+  void CopyTrainedLayersFrom(const string& trained_filename);
+  void CopyTrainedLayersFromBinaryProto(const string& trained_filename);
+  void CopyTrainedLayersFromHDF5(const string& trained_filename);
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   /// @brief Writes the net to a proto.
   void ToProto(NetParameter* param, bool write_diff = false) const;
   /// @brief Writes the net to an HDF5 file.
@@ -238,10 +244,13 @@ class Net {
   static bool StateMeetsRule(const NetState& state, const NetStateRule& rule,
       const string& layer_name);
 
-  // Prediction Model
+//<<<<<<< HEAD
+//  // Prediction Model
   inline void server_predict();
   inline void client_predict();
 
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   // Invoked at specific points during an iteration
   class Callback {
    protected:
@@ -351,10 +360,13 @@ class Net {
   vector<Callback*> before_backward_;
   vector<Callback*> after_backward_;
 
+//<<<<<<< HEAD
   //current using layers id get setters
   int layer_id_left_;
   int layer_id_right_;
 
+//=======
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 DISABLE_COPY_AND_ASSIGN(Net);
 };
 

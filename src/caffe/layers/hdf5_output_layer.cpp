@@ -1,7 +1,18 @@
+//<<<<<<< HEAD
+//#include <vector>
+
+//#include "hdf5/serial/hdf5.h"
+//#include "hdf5/serial/hdf5_hl.h"
+//=======
+#ifdef USE_HDF5
 #include <vector>
 
+//#include "hdf5.h"
+//#include "hdf5_hl.h"
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 #include "hdf5/serial/hdf5.h"
 #include "hdf5/serial/hdf5_hl.h"
+
 
 #include "caffe/layers/hdf5_output_layer.hpp"
 #include "caffe/util/hdf5.hpp"
@@ -72,3 +83,7 @@ INSTANTIATE_CLASS(HDF5OutputLayer);
 REGISTER_LAYER_CLASS(HDF5Output);
 
 }  // namespace caffe
+//<<<<<<< HEAD
+//=======
+#endif  // USE_HDF5
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383

@@ -55,7 +55,11 @@ class Solver {
   // The main entry of the solver function. In default, iter will be zero. Pass
   // in a non-zero iter number to resume training for a pre-trained net.
   virtual void Solve(const char* resume_file = NULL);
-  inline void Solve(const string resume_file) { Solve(resume_file.c_str()); }
+//<<<<<<< HEAD
+//  inline void Solve(const string resume_file) { Solve(resume_file.c_str()); }
+//=======
+  inline void Solve(const string& resume_file) { Solve(resume_file.c_str()); }
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   void Step(int iters);
   // The Restore method simply dispatches to one of the
   // RestoreSolverStateFrom___ protected methods. You should implement these
@@ -94,10 +98,18 @@ class Solver {
    */
   virtual inline const char* type() const { return ""; }
 
- protected:
+//<<<<<<< HEAD
+// protected:
+//  // Make and apply the update value for the current iteration.
+//  virtual void ApplyUpdate() = 0;
+//  string SnapshotFilename(const string extension);
+//=======
   // Make and apply the update value for the current iteration.
   virtual void ApplyUpdate() = 0;
-  string SnapshotFilename(const string extension);
+
+ protected:
+  string SnapshotFilename(const string& extension);
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   string SnapshotToBinaryProto();
   string SnapshotToHDF5();
   // The test routine

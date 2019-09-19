@@ -1,10 +1,16 @@
+#ifdef USE_HDF5
 #ifndef CAFFE_UTIL_HDF5_H_
 #define CAFFE_UTIL_HDF5_H_
 
 #include <string>
 
+//<<<<<<< HEAD
 #include "hdf5/serial/hdf5.h"
 #include "hdf5/serial/hdf5_hl.h"
+//=======
+//#include "hdf5.h"
+//#include "hdf5_hl.h"
+//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
 
 #include "caffe/blob.hpp"
 
@@ -37,3 +43,4 @@ string hdf5_get_name_by_idx(hid_t loc_id, int idx);
 }  // namespace caffe
 
 #endif   // CAFFE_UTIL_HDF5_H_
+#endif   // USE_HDF5
