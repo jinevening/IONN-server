@@ -544,6 +544,10 @@ void model_create_server(){
 }
 
 int main(int argc, char** argv) {
+  string net_file;
+  if (argc == 2){
+    net_file = argv[1];
+  }
 
 #ifdef CPU_ONLY
   Caffe::set_mode(Caffe::CPU);
@@ -557,6 +561,19 @@ int main(int argc, char** argv) {
   try {
 //    boost::asio::io_service io_service;
 //    server(io_service, PORT);
+    if(argc == 2){
+      struct timeval start;
+      struct timeval finish;
+      double timechk;
+      cout <<"Performing warmup" <<endl;
+      gettimeofday(&start, NULL);
+      Net<float>* warmup_net = new Net<float>(net_file, TEST);
+      warmup_net->~Net();
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Warmup took " << timechk << " s" << endl;
+    }
     boost::thread_group threads;
     threads.create_thread(boost::bind(model_upload_server, 7675));
     threads.create_thread(boost::bind(model_create_server));
