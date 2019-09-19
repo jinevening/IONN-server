@@ -224,15 +224,22 @@ void execution_server(unsigned short port){
 
       // If more bytes have been uploaded,
       // then we update the model to the latest one
-      if (transmitted_bytes_inuse != total_bytes_model) {
+
+      {
         boost::lock_guard<boost::mutex> _(mutex_saved_net);
-        transmitted_bytes_inuse = total_bytes_model;
-//        net.reset(saved_net);
-        {
-          boost::lock_guard<boost::mutex> _(mutex_net_inuse);
-          saved_net->inUse = true;
+        if (transmitted_bytes_inuse != total_bytes_model) {
+          transmitted_bytes_inuse = total_bytes_model;
+//          net.reset(saved_net);
+          {
+            boost::lock_guard<boost::mutex> _(mutex_net_inuse);
+            saved_net->inUse = true;
+          }
+          net = saved_net;
         }
-        net = saved_net;
+        else if(firstmodelmade == true) {
+          boost::lock_guard<boost::mutex> _(mutex_net_inuse);
+          net->inUse = true;
+        }
       }
       
       if(firstmodelmade == false){
@@ -246,7 +253,7 @@ void execution_server(unsigned short port){
          transmitted_bytes_inuse = total_bytes_model;
          saved_net->inUse = true;
          net = saved_net;
-       }
+      }
 
       cout << "net used for forward has layers from "<<net->getLayerIDLeft() << ", " << net->getLayerIDRight()<< endl;
       Blob<float>* input_layer;
@@ -385,10 +392,7 @@ void model_upload_server(int port){
           is_first_net = true;
           cout << "model upload complete" << endl;
         }
-
-
       }while(availBytes >= next_total_size and availBytes != 0);
-//      total_bytes_model += increase_in_model_size;
 
     }
   }
@@ -428,16 +432,16 @@ void model_create_server(){
     gettimeofday(&start, NULL);
     Net<float>* new_net = new Net<float>( *(proto_param[net_param_index]) );
 //      cout << "breakpoint model2" <<endl;
-    gettimeofday(&finish, NULL);
+//    gettimeofday(&finish, NULL);
 //      new_net->Reshape();
 //      net.reset(new_net);
-    timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-    (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-    timechk_model_make += timechk;
+//    timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+//    (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+//    timechk_model_make += timechk;
     num_model_made++;
     increase_in_model_size += front_model_size[net_param_index] + rear_model_size[net_param_index];
 
-    cout << "Remaking of protoparam time of "<< num_model_made <<"th model : " << timechk << " s, total "<< timechk_model_make << " s" << endl;
+//    cout << "Remaking of protoparam time of "<< num_model_made <<"th model : " << timechk << " s, total "<< timechk_model_make << " s" << endl;
 //    boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
     new_net ->inUse = false;
 
@@ -486,23 +490,12 @@ void model_create_server(){
 
     gettimeofday(&finish, NULL);
 
-    cout << "Layers in newmodel = "<<new_net->getLayerIDLeft() << ", " << new_net->getLayerIDRight() <<" num of layers = "<<new_net->layer_names().size() << " number of partitions added = " << net_param_index + 1<< endl;
+    cout << "Layers in "<<num_model_made <<"th model = "<<new_net->getLayerIDLeft() << ", " << new_net->getLayerIDRight() <<" num of layers = "<<new_net->layer_names().size() << " number of partitions added = " << net_param_index + 1<< endl;
     timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
               (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-    cout << "Server-side Net creation time : " << timechk << " s" << endl;
+    timechk_model_make += timechk;
+    cout << "Server-side Net creation time : " << timechk << " s. Total " << timechk_model_make << " s."<< endl;
 
-
-//    timechk2 = (double)(finish2.tv_sec) + (double)(finish2.tv_usec) / 1000000.0 -
-//    (double)(start2.tv_sec) - (double)(start2.tv_usec) / 1000000.0;
-
-//    cout << "Copying parameters of previous layer time : " << timechk2 << " s" << endl;
-
-    // Send ACK to the client
-//    buffer[0] = 'A';
-//    buffer[1] = 'C';
-//    buffer[2] = 'K';
-//    int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, 3));
-//    cout << "Sent " << sent_bytes << " bytes" << endl;
     {
       boost::lock_guard<boost::mutex> _(mutex_saved_net);
       total_bytes_model += increase_in_model_size;
@@ -514,13 +507,15 @@ void model_create_server(){
 //      auto i = nets_inuse.begin();
       int model_freed = 0;
 
-      gettimeofday(&start, NULL);
+//      gettimeofday(&start, NULL);
 
       while(i!= (--nets_inuse.end()) ){
         boost::lock_guard<boost::mutex> _(mutex_net_inuse);
         if ((*i)->inUse == false){
 //          cout << "before deconstructor in list is needed ";
-          (*i)->~Net();
+//          (*i)->~Net();
+          boost::thread t([](Net<float>* net_pointer){net_pointer->~Net();}, (*i));
+          t.detach();
           model_freed += 1;
           i = nets_inuse.erase(i);
 //          cout << "after deconstructor is performed ";
@@ -529,10 +524,10 @@ void model_create_server(){
           i++;
         }
       }
-      gettimeofday(&finish, NULL);
-      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-      (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-      cout << "Freeing "<< model_freed << " models took " << timechk << "s" << endl;
+//      gettimeofday(&finish, NULL);
+//      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+//      (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+//      cout << "Freeing "<< model_freed << " models took " << timechk << "s" << endl;
     }
 
     if(firstmodelmade == false){
