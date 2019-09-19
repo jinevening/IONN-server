@@ -795,8 +795,10 @@ void Net<Dtype>::Reshape() {
 }
 
 template <typename Dtype>
-void Net<Dtype>::CopyTrainedLayersFrom(const NetParameter& param) {
+void Net<Dtype>::CopyTrainedLayersFrom(const NetParameter& param){ 
   int num_source_layers = param.layer_size();
+//  int target_layer_id=0;
+//  std::cout << "copycalled" << std::endl;
   for (int i = 0; i < num_source_layers; ++i) {
     const LayerParameter& source_layer = param.layer(i);
     const string& source_layer_name = source_layer.name();
@@ -805,11 +807,22 @@ void Net<Dtype>::CopyTrainedLayersFrom(const NetParameter& param) {
         layer_names_[target_layer_id] != source_layer_name) {
       ++target_layer_id;
     }
+//    std::cout <<"targetidis: " << target_layer_id << std::endl;
     if (target_layer_id == layer_names_.size()) {
       LOG(INFO) << "Ignoring source layer " << source_layer_name;
       continue;
     }
-    DLOG(INFO) << "Copying source layer " << source_layer_name;
+/*
+    int lt = getLayerIDLeft();
+    int rt = getLayerIDRight();
+    if(lt == -1 or target_layer_id +1 < lt){
+//      setLayerIDLeft(target_layer_id+1);
+    }
+    if(rt == -1 or target_layer_id > rt){
+//      setLayerIDRight(target_layer_id);
+    }
+*/    
+  DLOG(INFO) << "Copying source layer " << source_layer_name;
     vector<shared_ptr<Blob<Dtype> > >& target_blobs =
         layers_[target_layer_id]->blobs();
     CHECK_EQ(target_blobs.size(), source_layer.blobs_size())
@@ -830,6 +843,23 @@ void Net<Dtype>::CopyTrainedLayersFrom(const NetParameter& param) {
       target_blobs[j]->FromProto(source_layer.blobs(j), kReshape);
     }
   }
+}
+
+template <typename Dtype>
+void Net<Dtype>::setLayerIDLeft(int start){
+  layer_id_left_ = start;
+}
+template <typename Dtype>
+void Net<Dtype>::setLayerIDRight(int end){
+  layer_id_right_ = end;
+}
+template <typename Dtype>
+int Net<Dtype>::getLayerIDLeft(){
+  return layer_id_left_;
+}
+template <typename Dtype>
+int Net<Dtype>::getLayerIDRight(){
+  return layer_id_right_;
 }
 
 template <typename Dtype>

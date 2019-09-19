@@ -65,6 +65,17 @@ class Net {
   void ClearParamDiffs();
 
   /**
+   *
+   *
+   *
+   **/
+
+  void setLayerIDLeft(int start);
+  void setLayerIDRight(int end);
+  int getLayerIDLeft();
+  int getLayerIDRight();
+
+  /**
    * The network backward should take no input and output, since it solely
    * computes the gradient w.r.t the parameters, and the data has already been
    * provided during the forward pass.
@@ -339,6 +350,10 @@ class Net {
   vector<Callback*> after_forward_;
   vector<Callback*> before_backward_;
   vector<Callback*> after_backward_;
+
+  //current using layers id get setters
+  int layer_id_left_;
+  int layer_id_right_;
 
 DISABLE_COPY_AND_ASSIGN(Net);
 };

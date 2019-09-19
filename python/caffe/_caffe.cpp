@@ -419,6 +419,8 @@ BOOST_PYTHON_MODULE(_caffe) {
     .def("copy_from", static_cast<void (Net<Dtype>::*)(const string)>(
         &Net<Dtype>::CopyTrainedLayersFrom))
     .def("share_with", &Net<Dtype>::ShareTrainedLayersWith)
+    .def("get_intermediate_graph", bp::make_function(&Net<Dtype>::get_intermediate_graph,
+        bp::return_value_policy<bp::copy_const_reference>()))
     .add_property("_blob_loss_weights", bp::make_function(
         &Net<Dtype>::blob_loss_weights, bp::return_internal_reference<>()))
     .def("_bottom_ids", bp::make_function(&Net<Dtype>::bottom_ids,
@@ -485,6 +487,14 @@ BOOST_PYTHON_MODULE(_caffe) {
     .add_property("layer_wise_reduce", &SolverParameter::layer_wise_reduce);
   bp::class_<LayerParameter>("LayerParameter", bp::no_init);
 
+  bp::class_<ExecutionGraphLayer>("ExecutionGraphLayer", bp::no_init)
+    .add_property("name", &ExecutionGraphLayer::name_)
+    .add_property("input_feature_size", &ExecutionGraphLayer::input_feature_size_)
+    .add_property("output_feature_size", &ExecutionGraphLayer::output_feature_size_)
+    .add_property("model_size", &ExecutionGraphLayer::model_size_)
+    .add_property("exec_times", bp::make_function(&ExecutionGraphLayer::exec_times_,
+          bp::return_internal_reference<>()))
+
   bp::class_<Solver<Dtype>, shared_ptr<Solver<Dtype> >, boost::noncopyable>(
     "Solver", bp::no_init)
     .add_property("net", &Solver<Dtype>::net)
@@ -543,6 +553,8 @@ BOOST_PYTHON_MODULE(_caffe) {
     .def(bp::vector_indexing_suite<vector<shared_ptr<Net<Dtype> > >, true>());
   bp::class_<vector<bool> >("BoolVec")
     .def(bp::vector_indexing_suite<vector<bool> >());
+  bp::class_<vector<ExecutionGraphLayer*> >("ExecutionGraphLayerVec")
+    .def(bp::vector_indexing_suite<vector<ExecutionGraphLayer*>, true>());
 
   bp::class_<NCCL<Dtype>, shared_ptr<NCCL<Dtype> >,
     boost::noncopyable>("NCCL",
