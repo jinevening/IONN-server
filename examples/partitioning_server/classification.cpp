@@ -471,12 +471,13 @@ void upload_server(int port)
       if (temp_net != NULL) {
         nets_inuse.push_back(temp_net);
       }
-      if (nets_inuse.size() > 5 ){
+      if (nets_inuse.size() > 1 ){
         std::list<Net<float>* >::iterator i = nets_inuse.begin();
+//        auto i = nets_inuse.begin();
         while(i!= --(--nets_inuse.end()) ){
           if ((*i)->inUse == false){
             cout << "before deconstructor in list is needed";
-            (*i)->~Net();
+//            (*i)->~Net();
             i = nets_inuse.erase(i);
             cout << "after deconstructor is performed";
           }
