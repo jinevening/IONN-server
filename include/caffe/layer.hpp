@@ -167,6 +167,7 @@ class Layer {
    * @brief Writes the layer parameter to a protocol buffer
    */
   virtual void ToProto(LayerParameter* param, bool write_diff = false);
+  virtual void ToProtoNoBlob(LayerParameter* param, bool write_diff = false);
 
   /**
    * @brief Returns the scalar loss associated with a top blob at a given index.
@@ -291,7 +292,6 @@ class Layer {
     param_propagate_down_[param_id] = value;
   }
 
-//<<<<<<< HEAD
   inline float get_exec_time_c(){
 	return exec_time_c_;
   }
@@ -304,8 +304,9 @@ class Layer {
   inline void set_exec_time_s(float s){
 	exec_time_s_ = s;
   }
-//=======
-//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
+  inline vector<int>* dominator() {
+    return &dominator_;
+  }
 
  protected:
   /** The protobuf that stores the layer parameters */
@@ -321,13 +322,13 @@ class Layer {
    *  the objective function. */
   vector<Dtype> loss_;
 
-//<<<<<<< HEAD
   /** Predicted execution time */
   float exec_time_c_;
   float exec_time_s_;
 
-//=======
-//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
+  /** Dominator */
+  vector<int> dominator_;
+
   /** @brief Using the CPU device, compute the layer output. */
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) = 0;
@@ -492,6 +493,13 @@ void Layer<Dtype>::ToProto(LayerParameter* param, bool write_diff) {
   for (int i = 0; i < blobs_.size(); ++i) {
     blobs_[i]->ToProto(param->add_blobs(), write_diff);
   }
+}
+
+// Serialize LayerParameter to protocol buffer without blob
+template <typename Dtype>
+void Layer<Dtype>::ToProtoNoBlob(LayerParameter* param, bool write_diff) {
+  param->Clear();
+  param->CopyFrom(layer_param_);
 }
 
 }  // namespace caffe

@@ -266,11 +266,6 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   }
   ShareWeights();
   debug_info_ = param.debug_info();
-//<<<<<<< HEAD
-  server_predict();
-
-//=======
-//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
 }
 
@@ -435,6 +430,39 @@ void Net<Dtype>::server_predict(){
 
 //=======
 //>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
+
+// Server side using profile
+template <typename Dtype>
+void Net<Dtype>::server_predict_from_profile(const string& prediction_file){
+	std::ifstream predictionModel(prediction_file.c_str(), ios::in);
+	string line;
+	if(predictionModel.is_open()){
+		int i = -1;
+		while(getline(predictionModel, line) && ++i < (int)layers_.size()){
+//			layers_[i]->set_exec_time_s(atof(line.substr(line.rfind(' ')).c_str()));
+			layers_[i]->set_exec_time_s(atof(line.c_str()));
+
+		}
+		predictionModel.close();
+	}
+}
+
+// Client side prediction model
+template <typename Dtype>
+void Net<Dtype>::client_predict(const string& prediction_file){
+	std::ifstream predictionModel(prediction_file.c_str(), ios::in);
+	string line;
+	if(predictionModel.is_open()){
+		int i = -1;
+		while(getline(predictionModel, line) && ++i < (int)layers_.size()){
+//			layers_[i]->set_exec_time_c(atof(line.substr(line.rfind(' ')).c_str()));
+			layers_[i]->set_exec_time_c(atof(line.c_str()));
+
+		}
+		predictionModel.close();
+	}
+}
+
 // Helper for Net::Init: add a new top blob to the net.
 template <typename Dtype>
 void Net<Dtype>::AppendTop(const NetParameter& param, const int layer_id,
@@ -1132,6 +1160,19 @@ const shared_ptr<Layer<Dtype> > Net<Dtype>::layer_by_name(
     LOG(WARNING) << "Unknown layer name " << layer_name;
   }
   return layer_ptr;
+}
+
+template <typename Dtype>
+int Net<Dtype>::layer_id_by_name(const string& layer_name) const {
+  if(has_layer(layer_name)) {
+    return layer_names_index_.find(layer_name)->second;
+  } else {
+    LOG(WARNING) << "Unknown layer name " << layer_name;
+    return -1;
+  }
+  // unreachable
+  CHECK(false);
+  return -1;
 }
 
 INSTANTIATE_CLASS(Net);

@@ -122,15 +122,12 @@ class Net {
    *        another Net.
    */
   void CopyTrainedLayersFrom(const NetParameter& param);
-//<<<<<<< HEAD
 //  void CopyTrainedLayersFrom(const string trained_filename);
 //  void CopyTrainedLayersFromBinaryProto(const string trained_filename);
 //  void CopyTrainedLayersFromHDF5(const string trained_filename);
-//=======
   void CopyTrainedLayersFrom(const string& trained_filename);
   void CopyTrainedLayersFromBinaryProto(const string& trained_filename);
   void CopyTrainedLayersFromHDF5(const string& trained_filename);
-//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   /// @brief Writes the net to a proto.
   void ToProto(NetParameter* param, bool write_diff = false) const;
   /// @brief Writes the net to an HDF5 file.
@@ -230,6 +227,7 @@ class Net {
   const shared_ptr<Blob<Dtype> > blob_by_name(const string& blob_name) const;
   bool has_layer(const string& layer_name) const;
   const shared_ptr<Layer<Dtype> > layer_by_name(const string& layer_name) const;
+  int layer_id_by_name(const string& layer_name) const;
 
   void set_debug_info(const bool value) { debug_info_ = value; }
 
@@ -244,13 +242,10 @@ class Net {
   static bool StateMeetsRule(const NetState& state, const NetStateRule& rule,
       const string& layer_name);
 
-//<<<<<<< HEAD
-//  // Prediction Model
-  inline void server_predict();
-  inline void client_predict();
+  void server_predict();
+  void server_predict_from_profile(const string& prediction_file = "");
+  void client_predict(const string& prediction_file = "");
 
-//=======
-//>>>>>>> 99bd99795dcdf0b1d3086a8d67ab1782a8a08383
   // Invoked at specific points during an iteration
   class Callback {
    protected:
@@ -275,6 +270,8 @@ class Net {
   void add_after_backward(Callback* value) {
     after_backward_.push_back(value);
   }
+
+  bool inUse = false; //If net is in use becomes True, then do not call destructor
 
  protected:
   // Helpers for Init.
