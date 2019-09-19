@@ -28,11 +28,106 @@ using boost::asio::ip::tcp;
 // We will keep received network parameter here for incremental offloading
 NetParameter saved_net_param;
 Net<float>* saved_net=NULL;
-int total_transmitted_bytes = 0;
+int total_bytes_model = 0;
 int transmitted_bytes_inuse = 0;
 bool firstmodelmade = false;
-boost::condition_variable_any cond;
-boost::mutex mutex;
+bool model_data_ready = false;
+
+boost::condition_variable cond_first_model;
+boost::condition_variable cond_model_data;
+boost::mutex mutex_first_model;
+boost::mutex mutex_model_data;
+
+boost::mutex mutex_net_inuse;
+boost::mutex mutex_saved_net;
+
+boost::mutex mutex_net_parameter;
+std::vector<NetParameter* > proto_param;
+std::vector<NetParameter* > front_net_param;
+std::vector<NetParameter* > rear_net_param;
+std::vector<int> proto_size;
+std::vector<int> offloading_point;
+std::vector<int> resume_point;
+std::vector<int> prototxt_end;
+std::vector<int> front_model_size;
+std::vector<int> rear_model_size;
+int net_param_index = 0;
+
+bool push_back_net_param(unsigned char* buffer_ptr){ //called by model_upload_server
+  double timechk;
+  struct timeval start;
+  struct timeval finish;
+  gettimeofday(&start, NULL);
+  NetParameter* proto_param_pointer = new NetParameter();
+  NetParameter* front_net_param_pointer = new NetParameter();
+  NetParameter* rear_net_param_pointer = new NetParameter();
+  gettimeofday(&finish, NULL);
+  timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+          (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+  cout << "Initializing 3 NetParameter in heap took " << timechk << " s" << endl;
+
+
+  boost::lock_guard<boost::mutex> guard(mutex_net_parameter);
+
+  proto_size.push_back(0);
+  offloading_point.push_back(0);
+  resume_point.push_back(0);
+  prototxt_end.push_back(0);
+  front_model_size.push_back(0);
+  rear_model_size.push_back(0);
+
+  CHECK_EQ(sizeof(int), 4);
+  memcpy(&proto_size.back(), buffer_ptr + 4, 4);
+  memcpy(&front_model_size.back(), buffer_ptr + 8, 4);
+  memcpy(&rear_model_size.back(), buffer_ptr + 12, 4);
+  memcpy(&offloading_point.back(), buffer_ptr + 16, 4);
+  memcpy(&resume_point.back(), buffer_ptr + 20, 4);
+  memcpy(&prototxt_end.back(), buffer_ptr + 24, 4);
+
+
+  cout << "proto_size "<< proto_size.back() << " bytes " << "from 1 to " << prototxt_end.back() << endl;
+  gettimeofday(&start, NULL);
+  int sizeofindexes = 28;
+// Decode received data
+  if (!(proto_param_pointer->ParseFromArray(buffer_ptr + sizeofindexes, proto_size.back()))) {
+    perror("protobuf prototxt decoding failed");
+    exit(EXIT_FAILURE);
+  }
+  if (front_model_size.back() > 0) {
+    if (!(front_net_param_pointer->ParseFromArray(buffer_ptr + sizeofindexes + proto_size.back(), front_model_size.back() ))) {
+      perror("Protobuf front network decoding failed");
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (rear_model_size.back() > 0) {
+    if (!(rear_net_param_pointer->ParseFromArray(buffer_ptr + sizeofindexes + proto_size.back() + front_model_size.back(), rear_model_size.back() ))) {
+      perror("Protobuf rear network decoding failed");
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  CHECK(!(front_model_size.back() == 0 && rear_model_size.back() == 0));
+
+  proto_param.push_back(proto_param_pointer);
+  front_net_param.push_back(front_net_param_pointer);
+  rear_net_param.push_back(rear_net_param_pointer);
+
+  if(model_data_ready == false){
+    {
+      boost::lock_guard<boost::mutex> lock(mutex_model_data);
+      model_data_ready = true;
+    }
+    cond_model_data.notify_all();
+  }
+
+
+  gettimeofday(&finish, NULL);
+  timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+            (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+  cout << "Server-side decode time of model data: " << timechk << " s" << endl;
+  return true;
+}
+
 
 void execution_server(unsigned short port){
   Caffe::set_mode(Caffe::GPU);
@@ -129,20 +224,26 @@ void execution_server(unsigned short port){
 
       // If more bytes have been uploaded,
       // then we update the model to the latest one
-      if (transmitted_bytes_inuse != total_transmitted_bytes) {
-        transmitted_bytes_inuse = total_transmitted_bytes;
+      if (transmitted_bytes_inuse != total_bytes_model) {
+        boost::lock_guard<boost::mutex> _(mutex_saved_net);
+        transmitted_bytes_inuse = total_bytes_model;
 //        net.reset(saved_net);
-        saved_net->inUse = true;
+        {
+          boost::lock_guard<boost::mutex> _(mutex_net_inuse);
+          saved_net->inUse = true;
+        }
         net = saved_net;
       }
       
       if(firstmodelmade == false){
-         cout << "net not created, going into wait"<<endl;
+        cout << "net not created, going into wait"<<endl;
+        boost::unique_lock<boost::mutex> lock(mutex_first_model);
         while(firstmodelmade == false){
-          boost::unique_lock<boost::mutex> lock=boost::unique_lock<boost::mutex>(mutex);
-          cond.wait(mutex);
+          cond_first_model.wait(lock);
         }
          cout <<"woke from wait"<<endl;
+         boost::lock_guard<boost::mutex> _(mutex_saved_net);
+         transmitted_bytes_inuse = total_bytes_model;
          saved_net->inUse = true;
          net = saved_net;
        }
@@ -176,9 +277,12 @@ void execution_server(unsigned short port){
 
       // Get output data
       Blob<float>* output_layer = net->output_blobs()[0];
-      net->inUse = false;
       BlobProto output_proto;
       output_layer->ToProto(&output_proto);
+      {
+        boost::lock_guard<boost::mutex> _(mutex_net_inuse);
+        net->inUse = false;
+      }
       int output_size = output_proto.ByteSize();
       memcpy(buffer, &output_size, 4);
       memcpy(buffer+4, &computed_upto, 4);
@@ -196,12 +300,12 @@ void execution_server(unsigned short port){
   }
 }
 
-void upload_server(int port)
-{
+void model_upload_server(int port){
+
+
   boost::asio::io_service io_service;
   tcp::acceptor a(io_service, tcp::endpoint(tcp::v4(), port));
   cout << "Upload Server Started on Port " << port << endl;
-
   // Huge buffer. We will use this again and again.
   unsigned char* buffer = new unsigned char[BUFF_SIZE];
 
@@ -213,81 +317,25 @@ void upload_server(int port)
     a.accept(sock);
     std::cout << "a client connected" << std::endl;
 
-    Net<float>* net;
-    NetParameter proto_param[PARAM_BUFF_SIZE];
-    NetParameter front_net_param[PARAM_BUFF_SIZE];
-    NetParameter rear_net_param[PARAM_BUFF_SIZE];
-    saved_net = NULL;
-    std::list<Net<float>* > nets_inuse;
     bool is_first_net =true;
     size_t n;
     int next_total_size = 0;
+    size_t data_to_read_sum = 0;
+    size_t data_already_read_sum = 0;
+    int increase_in_model_size = 0;
 
     for (;;) {
       memset(buffer, 0, BUFF_SIZE);
       unsigned char* buffer_ptr = buffer;
 
       int curr_total_size = 0;	// proto + front_model + rear_model
-      int increase_in_model_size = 0;
-//      int total_size[PARAM_BUFF_SIZE] = {0};
-      int proto_size[PARAM_BUFF_SIZE] = {0};
-      int offloading_point[PARAM_BUFF_SIZE] = {0};
-      int resume_point[PARAM_BUFF_SIZE] = {0};
-      int prototxt_end[PARAM_BUFF_SIZE] = {0};
-      int front_model_size[PARAM_BUFF_SIZE] = {0};
-      int rear_model_size[PARAM_BUFF_SIZE] = {0};
       double timechk;
-      double timechk2;
       struct timeval start;
       struct timeval finish;
 
-      cout << "nets_inuse size before getting data from buffer: " << nets_inuse.size() <<endl;
+      cout << "partitions waiting to be created: " << proto_param.size() <<endl;
 
       boost::system::error_code error;
-/*      gettimeofday(&start, NULL);
-      try {
-        // Receive Data
-        do {
-          size_t length = sock.read_some(boost::asio::buffer(buffer_ptr, BUFF_SIZE), error);
-          if (error == boost::asio::error::eof)
-            break; // Connection closed cleanly by peer.
-          else if (error)
-            throw boost::system::system_error(error); // Some other error.
-
-          if (buffer == buffer_ptr) {
-            memcpy(&total_size, buffer, 4);
-            cout << "Total size " << total_size << " bytes" << endl;
-          }
-          buffer_ptr += length;
-        	//cout << "Uploading thread" << endl;
-        //	cout << "Received data so far : " << buffer_ptr - buffer << endl;
-        } while ((buffer_ptr - buffer) < total_size + 16 );
-      }
-      catch (std::exception& e) {
-        std::cerr << "Exception in thread: " << e.what() << "\n";
-        return;
-      }
-*/
-
-      // testfornetcreat
-/*
-      boost::asio::read(sock, boost::asio::buffer(buffer_ptr, 4), boost::asio::transfer_all(), error);
-      memcpy(&total_proto_size, buffer_ptr, 4);
-      buffer_ptr = buffer_ptr + 4;
-      boost::asio::read(sock, boost::asio::buffer(buffer_ptr, total_proto_size), boost::asio::transfer_all(), error);
-      if (!(total_proto_param.ParseFromArray(buffer_ptr, total_proto_size))) {
-        perror("protobuf total_prototxt decoding failed");
-        exit(EXIT_FAILURE);
-      }
-      buffer_ptr += total_proto_size;
-*/
-      //testend...more later
-//      size_t availBytes;
-//      availBytes = sock.available();
-//      while(availBytes < 4){
-//        availBytes = sock.available();
-//      }
-      int data_index = 0;
       size_t availBytes = 0;
 
       do{
@@ -303,7 +351,12 @@ void upload_server(int port)
           curr_total_size = next_total_size;
         }
         increase_in_model_size += curr_total_size;
-        cout << "Total size " << curr_total_size << " bytes of model partition to read "<<sock.available() << " bytes available in socket" << endl;
+        int temp = sock.available();
+        data_already_read_sum += temp;
+        data_to_read_sum += curr_total_size-temp;
+        cout << "Total size " << curr_total_size << " bytes of model partition to read, "<< temp << " bytes available in socket" << endl;
+        cout << "Already read data size sum: "<<data_already_read_sum<<". Data to read sum: "<< data_to_read_sum << endl;
+
         do {
           n  = boost::asio::read(sock, boost::asio::buffer(buffer_ptr+4, curr_total_size+24), boost::asio::transfer_all(), error);
         }
@@ -318,44 +371,7 @@ void upload_server(int port)
 
         cout << "Received " << n -24 << " bytes of model. Time to recieve : " << timechk << "s" << endl;
 
-        CHECK_EQ(sizeof(int), 4);
-        memcpy(&proto_size[data_index], buffer_ptr + 4, 4);
-        memcpy(&front_model_size[data_index], buffer_ptr + 8, 4);
-        memcpy(&rear_model_size[data_index], buffer_ptr + 12, 4);
-        memcpy(&offloading_point[data_index], buffer_ptr + 16, 4);
-        memcpy(&resume_point[data_index], buffer_ptr + 20, 4);
-        memcpy(&prototxt_end[data_index], buffer_ptr + 24, 4);
-
-
-        cout << "proto_size of data index "<< data_index << " is = " << proto_size[data_index] << " bytes " << "from 1 to " << prototxt_end[data_index]<< endl;
-        gettimeofday(&start, NULL);
-        int sizeofindexes = 28;
-      // Decode received data
-        if (!(proto_param[data_index].ParseFromArray(buffer_ptr + sizeofindexes, proto_size[data_index]))) {
-          perror("protobuf prototxt decoding failed");
-          exit(EXIT_FAILURE);
-        }
-        if (front_model_size[data_index] > 0) {
-          if (!(front_net_param[data_index].ParseFromArray(buffer_ptr + sizeofindexes + proto_size[data_index], front_model_size[data_index]))) {
-            perror("Protobuf front network decoding failed");
-            exit(EXIT_FAILURE);
-          }
-        }
-        if (rear_model_size[data_index] > 0) {
-          if (!(rear_net_param[data_index].ParseFromArray(buffer_ptr + sizeofindexes + proto_size[data_index] + front_model_size[data_index], rear_model_size[data_index]))) {
-            perror("Protobuf rear network decoding failed");
-            exit(EXIT_FAILURE);
-          }
-        }
-
-        gettimeofday(&finish, NULL);
-        timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-                  (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-        cout << "Server-side decode time of model data: " << timechk << " s" << endl;
-
-
-        CHECK(!(front_model_size[data_index] == 0 && rear_model_size[data_index] == 0));
-
+        push_back_net_param(buffer_ptr); //decode received data and store to global std::vector variables
         
         do{
           n = boost::asio::read(sock, boost::asio::buffer(buffer_ptr, 4), boost::asio::transfer_all(), error);
@@ -364,147 +380,171 @@ void upload_server(int port)
         memcpy(&next_total_size, buffer_ptr, 4);
         availBytes = 0;
         availBytes = sock.available();
-        data_index += 1;
         cout << "next partition size: " << next_total_size << " and bytes available in socket: " << availBytes << endl;
         if (next_total_size == 0) {
           is_first_net = true;
-        }
-        if (data_index >= PARAM_BUFF_SIZE) {
-          cout << "a lot of partitions sent in short time!"<<endl;
+          cout << "model upload complete" << endl;
         }
 
 
-      }while(data_index < PARAM_BUFF_SIZE and availBytes >= next_total_size and availBytes != 0);
-      size_t last_index = data_index - 1;
-      gettimeofday(&start, NULL);
-      // Initialize received network
-      // If front/rear model is arrived, we create a new network
-      // If not, we will just use the previous network
-//      if (!(front_model_size == 0 && rear_model_size == 0)) {
-      struct timeval start2;
-      struct timeval finish2;
+      }while(availBytes >= next_total_size and availBytes != 0);
+//      total_bytes_model += increase_in_model_size;
 
-        // testcreatednet2
-        /*
-        if(net_test == NULL){
-        gettimeofday(&start2, NULL);
-          net_test = new Net<float>(total_proto_param);
-        gettimeofday(&finish2, NULL);
-        timechk2 = (double)(finish2.tv_sec) + (double)(finish2.tv_usec) / 1000000.0 -
-        (double)(start2.tv_sec) - (double)(start2.tv_usec) / 1000000.0;
-        cout << "Remaking of first total protoparam time cost : " << timechk2 << " s" << endl;
-        }
-        */
-        //testend
-
-//        cout << "breakpoint model1"<<endl;
-
-
-      gettimeofday(&start2, NULL);
-//        cin.get();
-
-
-      Net<float>* new_net = new Net<float>(proto_param[last_index]);
-//        cout << "breakpoint model2" <<endl;
-      gettimeofday(&finish2, NULL);
-//        new_net->Reshape();
-//        net.reset(new_net);
-      timechk2 = (double)(finish2.tv_sec) + (double)(finish2.tv_usec) / 1000000.0 -
-      (double)(start2.tv_sec) - (double)(start2.tv_usec) / 1000000.0;
-      cout << "Remaking of protoparam time of the " << data_index <<"st model cost : " << timechk2 << " s" << endl;
-      net = new_net;
-      new_net ->inUse = false;
-
-      net->setLayerIDLeft(offloading_point[last_index]);
-      net->setLayerIDRight(resume_point[last_index]);
-      gettimeofday(&start2, NULL);
-      net->CopyTrainedLayersFrom(saved_net_param);
-      gettimeofday(&finish2, NULL);
-      for(size_t i = 0; i < data_index; i++){
-        if (front_model_size[i] > 0) {
-          net->CopyTrainedLayersFrom(front_net_param[i]);
-
-//          net_test->CopyTrainedLayersFrom(front_net_param);
-
-          if (rear_model_size[i] > 0)  // both front model and rear model arrived
-            net->CopyTrainedLayersFrom(rear_net_param[i]);
-//            net_test->CopyTrainedLayersFrom(rear_net_param);
-          }
-        else {  // only rear model arrived
-          net->CopyTrainedLayersFrom(rear_net_param[i]);
-
-//          net_test->CopyTrainedLayersFrom(rear_net_param);
-        }
-      }
-//      }
-      gettimeofday(&finish, NULL);
-
-      cout << "Layers in newmodel = "<<net->getLayerIDLeft() << ", " << net->getLayerIDRight() <<" num of layers = "<<net->layer_names().size() << " number of partitions added = " << data_index << endl;
-      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
-                (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
-      cout << "Server-side Net creation time : " << timechk << " s" << endl;
-
-
-      timechk2 = (double)(finish2.tv_sec) + (double)(finish2.tv_usec) / 1000000.0 -
-      (double)(start2.tv_sec) - (double)(start2.tv_usec) / 1000000.0;
-
-      cout << "Copying parameters of previous layer time : " << timechk2 << " s" << endl;
-
-      // Send ACK to the client
-//      buffer[0] = 'A';
-//      buffer[1] = 'C';
-//      buffer[2] = 'K';
-//      int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, 3));
-//      cout << "Sent " << sent_bytes << " bytes" << endl;
-      Net<float>* temp_net = saved_net;
-      saved_net = new_net;
-//      if( temp_net != NULL and temp_net->inUse == false) {
-//        cout << "before deconstructor of prev net";
-//        temp_net->~Net();
-//        cout << "after deconstructor of prev net";
-//      }
-//      else if(temp_net != NULL){
-//        nets_inuse.push_back(temp_net);
-//        cout << "nets_inuse size = " << nets_inuse.size() << endl;
-//      }
-//
-      if (temp_net != NULL) {
-        nets_inuse.push_back(temp_net);
-      }
-      if (nets_inuse.size() > 1 ){
-        std::list<Net<float>* >::iterator i = nets_inuse.begin();
-//        auto i = nets_inuse.begin();
-        while(i!= --(--nets_inuse.end()) ){
-          if ((*i)->inUse == false){
-            cout << "before deconstructor in list is needed";
-//            (*i)->~Net();
-            i = nets_inuse.erase(i);
-            cout << "after deconstructor is performed";
-          }
-          else {
-            i++;
-          }
-        }
-      }
-//      for(std::list<Net<float>* >::iterator i = nets_inuse.begin(); i!=nets_inuse.end(); i++){
-//        if ((*i)->inUse == false){
-//          cout << "before deconstructor in list is needed";
-//          (*i)->~Net();
-//          nets_inuse.erase(i);
-//          cout << "after deconstructor is performed";
-//        }
-//      }
-
-      if(firstmodelmade == false){
-        boost::unique_lock<boost::mutex> lock=boost::unique_lock<boost::mutex>(mutex);
-        firstmodelmade = true;
-        cond.notify_one();
-        lock.unlock();
-      }
-      total_transmitted_bytes += increase_in_model_size;
-      // Save current net parameter for later use (incremental offloading)
-      net->ToProto(&saved_net_param, false);
     }
+  }
+}
+
+void model_create_server(){
+  double timechk_model_make = 0;
+  int num_model_made = 0;
+  std::list<Net<float>* > nets_inuse;
+  int increase_in_model_size = 0;
+
+  for (;;)
+  {
+    if(model_data_ready == false){
+      boost::unique_lock<boost::mutex> lock(mutex_model_data);
+      while(model_data_ready == false){
+  //      boost::unique_lock<boost::mutex> lock=boost::unique_lock<boost::mutex>(mutex_model_data);
+        cond_model_data.wait(lock);
+      }
+    }
+
+    mutex_net_parameter.lock();
+    try{
+      net_param_index = proto_param.size() - 1;
+    }
+    catch (...){
+      mutex_net_parameter.unlock();
+      throw;
+    }
+    mutex_net_parameter.unlock();
+    struct timeval start;
+    struct timeval finish;
+    double timechk;
+//    struct timeval start2;
+//    struct timeval finish2;
+//    double timechk2;
+    gettimeofday(&start, NULL);
+    Net<float>* new_net = new Net<float>( *(proto_param[net_param_index]) );
+//      cout << "breakpoint model2" <<endl;
+    gettimeofday(&finish, NULL);
+//      new_net->Reshape();
+//      net.reset(new_net);
+    timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+    (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+    timechk_model_make += timechk;
+    num_model_made++;
+    increase_in_model_size += front_model_size[net_param_index] + rear_model_size[net_param_index];
+
+    cout << "Remaking of protoparam time of "<< num_model_made <<"th model : " << timechk << " s, total "<< timechk_model_make << " s" << endl;
+//    boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
+    new_net ->inUse = false;
+
+    new_net->setLayerIDLeft(offloading_point[net_param_index]);
+    new_net->setLayerIDRight(resume_point[net_param_index]);
+//    gettimeofday(&start2, NULL);
+    new_net->CopyTrainedLayersFrom(saved_net_param);
+//    gettimeofday(&finish2, NULL);
+    for(size_t i = 0; i < net_param_index + 1; i++){
+      if (front_model_size[i] > 0) {
+        new_net->CopyTrainedLayersFrom((*front_net_param[i]));
+        if (rear_model_size[i] > 0)  // both front model and rear model arrived
+          new_net->CopyTrainedLayersFrom((*rear_net_param[i]));
+        }
+      else {  // only rear model arrived
+        new_net->CopyTrainedLayersFrom((*rear_net_param[i]));
+
+      }
+    }
+    mutex_net_parameter.lock();
+    try{
+      for(int i = 0; i < net_param_index + 1; i++){
+        proto_param[i]->~NetParameter();
+        front_net_param[i]->~NetParameter();
+        rear_net_param[i]->~NetParameter();
+      }
+      proto_param.erase(proto_param.begin(), proto_param.begin() + net_param_index + 1);
+      front_net_param.erase(front_net_param.begin(), front_net_param.begin() + net_param_index + 1);
+      rear_net_param.erase(rear_net_param.begin(), rear_net_param.begin() + net_param_index + 1);
+      proto_size.erase(proto_size.begin(), proto_size.begin()+ net_param_index + 1); 
+      offloading_point.erase(offloading_point.begin(), offloading_point.begin() + net_param_index + 1);
+      resume_point.erase(resume_point.begin(), resume_point.begin()+ net_param_index + 1);
+      prototxt_end.erase(prototxt_end.begin(), prototxt_end.begin() + net_param_index + 1);
+      front_model_size.erase(front_model_size.begin(), front_model_size.begin() + net_param_index + 1);
+      rear_model_size.erase(rear_model_size.begin(), rear_model_size.begin() + net_param_index + 1);
+
+      if (proto_param.size() == 0) {
+        model_data_ready = false;
+      }
+    }
+    catch(...) {
+      mutex_net_parameter.unlock();
+      throw;
+    }
+    mutex_net_parameter.unlock();
+
+    gettimeofday(&finish, NULL);
+
+    cout << "Layers in newmodel = "<<new_net->getLayerIDLeft() << ", " << new_net->getLayerIDRight() <<" num of layers = "<<new_net->layer_names().size() << " number of partitions added = " << net_param_index + 1<< endl;
+    timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+              (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+    cout << "Server-side Net creation time : " << timechk << " s" << endl;
+
+
+//    timechk2 = (double)(finish2.tv_sec) + (double)(finish2.tv_usec) / 1000000.0 -
+//    (double)(start2.tv_sec) - (double)(start2.tv_usec) / 1000000.0;
+
+//    cout << "Copying parameters of previous layer time : " << timechk2 << " s" << endl;
+
+    // Send ACK to the client
+//    buffer[0] = 'A';
+//    buffer[1] = 'C';
+//    buffer[2] = 'K';
+//    int sent_bytes = boost::asio::write(sock, boost::asio::buffer(buffer, 3));
+//    cout << "Sent " << sent_bytes << " bytes" << endl;
+    {
+      boost::lock_guard<boost::mutex> _(mutex_saved_net);
+      total_bytes_model += increase_in_model_size;
+      saved_net = new_net;
+    }
+    nets_inuse.push_back(new_net);
+    if (nets_inuse.size() > 1 ){
+      std::list<Net<float>* >::iterator i = nets_inuse.begin();
+//      auto i = nets_inuse.begin();
+      int model_freed = 0;
+
+      gettimeofday(&start, NULL);
+
+      while(i!= (--nets_inuse.end()) ){
+        boost::lock_guard<boost::mutex> _(mutex_net_inuse);
+        if ((*i)->inUse == false){
+//          cout << "before deconstructor in list is needed ";
+          (*i)->~Net();
+          model_freed += 1;
+          i = nets_inuse.erase(i);
+//          cout << "after deconstructor is performed ";
+        }
+        else {
+          i++;
+        }
+      }
+      gettimeofday(&finish, NULL);
+      timechk = (double)(finish.tv_sec) + (double)(finish.tv_usec) / 1000000.0 -
+      (double)(start.tv_sec) - (double)(start.tv_usec) / 1000000.0;
+      cout << "Freeing "<< model_freed << " models took " << timechk << "s" << endl;
+    }
+
+    if(firstmodelmade == false){
+      {
+        boost::lock_guard<boost::mutex> lock(mutex_first_model);
+        firstmodelmade = true;
+      }
+      cond_first_model.notify_all();
+    }
+    // Save current net parameter for later use (incremental offloading)
+    new_net->ToProto(&saved_net_param, false);
+    
   }
 }
 
@@ -523,7 +563,8 @@ int main(int argc, char** argv) {
 //    boost::asio::io_service io_service;
 //    server(io_service, PORT);
     boost::thread_group threads;
-    threads.create_thread(boost::bind(upload_server, 7675));
+    threads.create_thread(boost::bind(model_upload_server, 7675));
+    threads.create_thread(boost::bind(model_create_server));
     threads.create_thread(boost::bind(execution_server, 7676));
     threads.join_all();
   }
